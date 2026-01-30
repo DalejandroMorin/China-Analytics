@@ -2,7 +2,7 @@
 name = "china-analytics"
 version = "0.1.0"
 description = "China Analytics API"
-authors = ["Tu Nombre <tu@email.com>"]
+authors = ["David <dalejandroreyes62@gmail.com>"]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.12"
@@ -18,3 +18,4 @@ python-multipart = "0.0.6"
 
 [build-system]
 requires = ["poetry-core"]
+
