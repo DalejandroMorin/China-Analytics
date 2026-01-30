@@ -106,7 +106,11 @@ app = FastAPI(
 # 🔧 CORS - ESENCIAL para React
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # Frontend React
+    allow_origins=[
+        "http://localhost:3000", 
+        "http://localhost:5173",
+        "https://china-analytics-4il7ktvsx-davids-projects-4020b49b.vercel.app"  # ← AÑADE ESTA LÍNEA
+    ],  # Frontend React
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
