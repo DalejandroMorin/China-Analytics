@@ -109,7 +109,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000", 
         "http://localhost:5173",
-        "https://china-analytics-4il7ktvsx-davids-projects-4020b49b.vercel.app"  # ← AÑADE ESTA LÍNEA
+        "https://china-analytics-4il7ktvsx-davids-projects-4020b49b.vercel.app",
+        "https://china-analytics.vercel.app/"
     ],  # Frontend React
     allow_credentials=True,
     allow_methods=["*"],
