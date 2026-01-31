@@ -4,22 +4,22 @@ import HeatmapCorrelaciones from '../components/Analysis/HeatmapCorrelaciones';
 import AnalisisComparativo from '../components/Analysis/AnalisisComparativo';
 import AnalisisTendencias from '../components/Analysis/AnalisisTendencias';
 
-// ✅ CORRECTO: Usar import.meta.env para Vite
+// ✅ Usar import.meta.env para Vite
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
 const AnalysisPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('correlaciones');
   const [indicadores, setIndicadores] = useState<any[]>([]);
   const [loadingIndicadores, setLoadingIndicadores] = useState(true);
-  
+
   const [correlacionesData, setCorrelacionesData] = useState<any>(null);
   const [comparativaData, setComparativaData] = useState<any>(null);
-  
+
   const [loading, setLoading] = useState({
     correlaciones: false,
     comparativa: false
   });
-  
+
   const [error, setError] = useState<string | null>(null);
 
   const tabs = [
@@ -31,12 +31,11 @@ const AnalysisPage: React.FC = () => {
   const cargarIndicadores = async () => {
     try {
       setLoadingIndicadores(true);
-      // ✅ CORRECTO: Usar API_BASE_URL dinámico
       const response = await fetch(`${API_BASE_URL}/api/china/indicadores/lista`);
       if (!response.ok) throw new Error('Error al cargar indicadores');
-      
+
       const data = await response.json();
-      const indicadoresFiltrados = data.filter((ind: any) => 
+      const indicadoresFiltrados = data.filter((ind: any) =>
         !['year', 'country'].includes(ind.field)
       );
       setIndicadores(indicadoresFiltrados);
@@ -52,11 +51,12 @@ const AnalysisPage: React.FC = () => {
     try {
       setLoading(prev => ({ ...prev, correlaciones: true }));
       setError(null);
-      
-      // ✅ CORRECTO: Usar API_BASE_URL dinámico
-      const response = await fetch(`${API_BASE_URL}/api/china/analisis/analisis/correlaciones`);
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/china/analisis/analisis/correlaciones`
+      );
       if (!response.ok) throw new Error('Error al cargar correlaciones');
-      
+
       const data = await response.json();
       setCorrelacionesData(data);
     } catch (err) {
@@ -72,11 +72,12 @@ const AnalysisPage: React.FC = () => {
     try {
       setLoading(prev => ({ ...prev, comparativa: true }));
       setError(null);
-      
-      // ✅ CORRECTO: Usar API_BASE_URL dinámico
-      const response = await fetch(`${API_BASE_URL}/api/china/analisis/analisis/comparativa`);
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/china/analisis/analisis/comparativa`
+      );
       if (!response.ok) throw new Error('Error al cargar análisis comparativo');
-      
+
       const data = await response.json();
       setComparativaData(data);
     } catch (err) {
@@ -89,7 +90,7 @@ const AnalysisPage: React.FC = () => {
   };
 
   useEffect(() => {
-    switch(activeTab) {
+    switch (activeTab) {
       case 'correlaciones':
         if (!correlacionesData) cargarCorrelaciones();
         break;
@@ -104,10 +105,10 @@ const AnalysisPage: React.FC = () => {
   }, []);
 
   const renderTabContent = () => {
-    switch(activeTab) {
+    switch (activeTab) {
       case 'correlaciones':
         return (
-          <HeatmapCorrelaciones 
+          <HeatmapCorrelaciones
             data={correlacionesData}
             loading={loading.correlaciones}
             error={error}
@@ -116,7 +117,7 @@ const AnalysisPage: React.FC = () => {
         );
       case 'comparativa':
         return (
-          <AnalisisComparativo 
+          <AnalisisComparativo
             data={comparativaData}
             loading={loading.comparativa}
             error={error}
@@ -125,7 +126,7 @@ const AnalysisPage: React.FC = () => {
         );
       case 'tendencias':
         return (
-          <AnalisisTendencias 
+          <AnalisisTendencias
             indicadores={indicadores}
             loading={loadingIndicadores}
           />
@@ -156,13 +157,13 @@ const AnalysisPage: React.FC = () => {
   const getMockComparativaData = () => ({
     resumen_ejecutivo: {
       total_indicadores_analizados: 14,
-      periodo_analizado: "1991-2020"
+      periodo_analizado: '1991-2020'
     },
     rankings_comparativos: {
       global: {
         top_10_crecimiento_global: [
           { indicador: 'total_reserves_usd', cagr_global: 15.76 },
-          { indicador: 'gdp_usd', cagr_global: 13.40 }
+          { indicador: 'gdp_usd', cagr_global: 13.4 }
         ]
       }
     }
@@ -173,125 +174,51 @@ const AnalysisPage: React.FC = () => {
       {/* Header */}
       <div className="rounded-2xl bg-gradient-to-r from-sky-500 to-sky-600 shadow-xl overflow-hidden">
         <div className="p-6 text-white">
-          <div className="flex flex-col md:flex-row md:items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">China Economic Analytics</h1>
-              <p className="text-sky-100 mt-1">Análisis Estadístico Avanzado</p>
-            </div>
-            <div className="mt-4 md:mt-0">
-              <div className="inline-flex items-center px-4 py-2 bg-white/20 backdrop-blur-sm rounded-full">
-                <span className="text-sm">14 indicadores • 1991-2020</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white p-6">
-          <h2 className="text-xl font-semibold text-stone-800 mb-3">
-            📈 Análisis Estadístico Avanzado
-          </h2>
-          <p className="text-stone-600">
-            Explora correlaciones, tendencias y análisis comparativo de {indicadores.length} indicadores económicos y sociales.
-            Datos históricos desde 1991 hasta 2020.
-          </p>
+          <h1 className="text-2xl font-bold">China Economic Analytics</h1>
+          <p className="text-sky-100 mt-1">Análisis Estadístico Avanzado</p>
         </div>
       </div>
-      
-      {/* Tabs de Navegación */}
-      <div className="bg-white rounded-2xl shadow-lg p-2 border border-stone-200">
+
+      {/* Tabs */}
+      <div className="bg-white rounded-2xl shadow-lg p-2">
         <div className="flex flex-wrap gap-2">
-          {tabs.map((tab) => (
+          {tabs.map(tab => (
             <button
               key={tab.id}
-              className={`flex items-center px-4 py-3 rounded-xl font-medium transition-all ${
-                activeTab === tab.id 
-                  ? 'bg-sky-500 text-white shadow-md' 
-                  : 'text-stone-600 hover:bg-stone-100 hover:text-stone-800'
-              }`}
               onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-2 rounded-xl ${
+                activeTab === tab.id
+                  ? 'bg-sky-500 text-white'
+                  : 'text-stone-600 hover:bg-stone-100'
+              }`}
             >
-              <span className="mr-2">{tab.icon}</span>
               {tab.label}
             </button>
           ))}
         </div>
       </div>
-      
-      {/* Contenido Principal */}
+
       {renderTabContent()}
-      
-      {/* Panel de Métricas Rápidas */}
-      {correlacionesData?.resumen_analisis && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-xl border border-blue-200">
-            <p className="text-sm text-blue-700 font-medium">Indicadores</p>
-            <p className="text-2xl font-bold text-blue-800 mt-1">
-              {correlacionesData.resumen_analisis.total_indicadores}
-            </p>
-            <p className="text-xs text-blue-600 mt-1">Analizados</p>
-          </div>
-          <div className="bg-gradient-to-br from-sky-50 to-sky-100 p-4 rounded-xl border border-sky-200">
-            <p className="text-sm text-sky-700 font-medium">Correlaciones</p>
-            <p className="text-2xl font-bold text-sky-800 mt-1">
-              {correlacionesData.resumen_analisis.total_pares_analizados}
-            </p>
-            <p className="text-xs text-sky-600 mt-1">Pares analizados</p>
-          </div>
-          <div className="bg-gradient-to-br from-amber-50 to-amber-100 p-4 rounded-xl border border-amber-200">
-            <p className="text-sm text-amber-700 font-medium">Significativas</p>
-            <p className="text-2xl font-bold text-amber-800 mt-1">
-              {correlacionesData.resumen_analisis.total_correlaciones_significativas}
-            </p>
-            <p className="text-xs text-amber-600 mt-1">
-              {(correlacionesData.resumen_analisis.total_correlaciones_significativas / 
-                correlacionesData.resumen_analisis.total_pares_analizados * 100).toFixed(1)}% del total
-            </p>
-          </div>
-          <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-xl border border-purple-200">
-            <p className="text-sm text-purple-700 font-medium">Correlación Media</p>
-            <p className="text-2xl font-bold text-purple-800 mt-1">
-              {correlacionesData.resumen_analisis.correlacion_promedio?.toFixed(3) || '0.573'}
-            </p>
-            <p className="text-xs text-purple-600 mt-1">Promedio de todas las relaciones</p>
-          </div>
-        </div>
-      )}
-      
-      {/* Enlaces Rápidos */}
-      <div className="bg-gradient-to-r from-stone-50 to-stone-100 rounded-2xl p-6 border border-stone-200">
-        <h3 className="text-lg font-semibold text-stone-800 mb-4">📚 API Documentation</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <a 
-            href={`${API_BASE_URL}/docs`}  {/* ✅ CORREGIDO: Usar API_BASE_URL dinámico */}
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="group bg-white p-4 rounded-xl border border-stone-200 hover:border-sky-300 hover:shadow-md transition-all"
-          >
-            <div className="flex items-center">
-              <div className="bg-gradient-to-br from-sky-100 to-sky-200 p-3 rounded-lg mr-4">
-                <span className="text-sky-600">📖</span>
-              </div>
-              <div>
-                <h4 className="font-semibold text-stone-800 group-hover:text-sky-600">Swagger UI</h4>
-                <p className="text-sm text-stone-600 mt-1">Documentación interactiva de la API</p>
-              </div>
-            </div>
-          </a>
-          <Link 
-            to="/dashboard" 
-            className="group bg-white p-4 rounded-xl border border-stone-200 hover:border-sky-300 hover:shadow-md transition-all"
-          >
-            <div className="flex items-center">
-              <div className="bg-gradient-to-br from-sky-100 to-sky-200 p-3 rounded-lg mr-4">
-                <span className="text-sky-600">📊</span>
-              </div>
-              <div>
-                <h4 className="font-semibold text-stone-800 group-hover:text-sky-600">Volver al Dashboard</h4>
-                <p className="text-sm text-stone-600 mt-1">Vista general de indicadores clave</p>
-              </div>
-            </div>
-          </Link>
-        </div>
+
+      {/* Links */}
+      <div className="bg-white rounded-2xl p-6">
+        <h3 className="text-lg font-semibold mb-4">📚 API Documentation</h3>
+
+        <a
+          href={`${API_BASE_URL}/docs`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block p-4 border rounded-xl hover:shadow"
+        >
+          Swagger UI
+        </a>
+
+        <Link
+          to="/dashboard"
+          className="block p-4 border rounded-xl hover:shadow mt-4"
+        >
+          Volver al Dashboard
+        </Link>
       </div>
     </div>
   );
