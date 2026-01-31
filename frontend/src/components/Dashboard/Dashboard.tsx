@@ -7,6 +7,9 @@ import SystemStatus from './SystemStatus';
 import ModalCorrelaciones from './ModalCorrelaciones';
 import { dashboardServices } from '../../services/api';
 
+// ✅ CORRECTO: Definir API_BASE_URL para Vite (igual que en otros componentes)
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+
 // Definir los 6 indicadores principales para las tarjetas KPI
 const INDICADORES_PRINCIPALES = [
   { 
@@ -172,7 +175,8 @@ const Dashboard: React.FC = () => {
     try {
       setLoading(prev => ({ ...prev, indicadores: true }));
       
-      const response = await fetch('http://127.0.0.1:8000/api/china/indicadores/lista');
+      // ✅ CORRECTO: Usar API_BASE_URL en lugar de URL hardcodeada
+      const response = await fetch(`${API_BASE_URL}/api/china/indicadores/lista`);
       if (!response.ok) throw new Error('Error al cargar indicadores');
       
       const data = await response.json();
@@ -224,7 +228,8 @@ const Dashboard: React.FC = () => {
       // Intentar cargar datos para cada año
       for (const año of AÑOS_ANALIZAR) {
         try {
-          const response = await fetch(`http://127.0.0.1:8000/api/china/datos/${año}`);
+          // ✅ CORRECTO: Usar API_BASE_URL en lugar de URL hardcodeada
+          const response = await fetch(`${API_BASE_URL}/api/china/datos/${año}`);
           if (response.ok) {
             const datos = await response.json();
             if (datos[indicadorKey] !== null && datos[indicadorKey] !== undefined) {

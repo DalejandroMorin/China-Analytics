@@ -4,7 +4,7 @@ import HeatmapCorrelaciones from '../components/Analysis/HeatmapCorrelaciones';
 import AnalisisComparativo from '../components/Analysis/AnalisisComparativo';
 import AnalisisTendencias from '../components/Analysis/AnalisisTendencias';
 
-
+// ✅ CORRECTO: Usar import.meta.env para Vite
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
 const AnalysisPage: React.FC = () => {
@@ -31,6 +31,7 @@ const AnalysisPage: React.FC = () => {
   const cargarIndicadores = async () => {
     try {
       setLoadingIndicadores(true);
+      // ✅ CORRECTO: Usar API_BASE_URL dinámico
       const response = await fetch(`${API_BASE_URL}/api/china/indicadores/lista`);
       if (!response.ok) throw new Error('Error al cargar indicadores');
       
@@ -52,6 +53,7 @@ const AnalysisPage: React.FC = () => {
       setLoading(prev => ({ ...prev, correlaciones: true }));
       setError(null);
       
+      // ✅ CORRECTO: Usar API_BASE_URL dinámico
       const response = await fetch(`${API_BASE_URL}/api/china/analisis/analisis/correlaciones`);
       if (!response.ok) throw new Error('Error al cargar correlaciones');
       
@@ -71,6 +73,7 @@ const AnalysisPage: React.FC = () => {
       setLoading(prev => ({ ...prev, comparativa: true }));
       setError(null);
       
+      // ✅ CORRECTO: Usar API_BASE_URL dinámico
       const response = await fetch(`${API_BASE_URL}/api/china/analisis/analisis/comparativa`);
       if (!response.ok) throw new Error('Error al cargar análisis comparativo');
       
@@ -259,7 +262,7 @@ const AnalysisPage: React.FC = () => {
         <h3 className="text-lg font-semibold text-stone-800 mb-4">📚 API Documentation</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <a 
-            href="http://127.0.0.1:8000/docs" 
+            href={`${API_BASE_URL}/docs`}  {/* ✅ CORREGIDO: Usar API_BASE_URL dinámico */}
             target="_blank" 
             rel="noopener noreferrer"
             className="group bg-white p-4 rounded-xl border border-stone-200 hover:border-sky-300 hover:shadow-md transition-all"

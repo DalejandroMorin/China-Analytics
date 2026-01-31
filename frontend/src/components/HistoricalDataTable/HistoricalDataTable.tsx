@@ -3,6 +3,9 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import type { HistoricalData, HistoricalDataTableProps, SortConfig, Indicator } from './HistoricalDataTable.types';
 import { columnCategories, formatValue, getVisibleColumns, isSortableColumn } from './HistoricalDataTable.utils';
 
+// ✅ CORRECTO: Definir API_BASE_URL para Vite (igual que en PredictionDashboard)
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+
 // Definir la interfaz del payload para el tooltip
 interface CustomTooltipPayload {
   dataKey: string;
@@ -145,7 +148,8 @@ const HistoricalDataTable: React.FC<HistoricalDataTableProps> = ({
     const fetchIndicators = async () => {
       try {
         setLoadingIndicators(true);
-        const response = await fetch('http://127.0.0.1:8000/api/china/indicadores/lista');
+        // ✅ CORRECTO: Usar API_BASE_URL en lugar de URL hardcodeada
+        const response = await fetch(`${API_BASE_URL}/api/china/indicadores/lista`);
         
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -168,8 +172,9 @@ const HistoricalDataTable: React.FC<HistoricalDataTableProps> = ({
     const fetchData = async () => {
       try {
         setLoading(true);
+        // ✅ CORRECTO: Usar API_BASE_URL en lugar de URL hardcodeada
         const response = await fetch(
-          `http://127.0.0.1:8000/api/china/datos/historicos?skip=${currentPage * itemsPerPage}&limit=${itemsPerPage}`
+          `${API_BASE_URL}/api/china/datos/historicos?skip=${currentPage * itemsPerPage}&limit=${itemsPerPage}`
         );
         
         if (!response.ok) {
@@ -192,6 +197,7 @@ const HistoricalDataTable: React.FC<HistoricalDataTableProps> = ({
     
     fetchData();
   }, [currentPage, itemsPerPage]);
+
 
   // Función para manejar el ordenamiento
   const handleSort = (key: keyof HistoricalData) => {

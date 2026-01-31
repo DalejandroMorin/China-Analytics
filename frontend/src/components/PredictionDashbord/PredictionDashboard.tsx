@@ -52,6 +52,9 @@ interface PredictionResponse {
 }
 
 const PredictionDashboard: React.FC = () => {
+  // ✅ CORRECTO: Definir API_BASE_URL para Vite
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+
   // Estados
   const [indicators, setIndicators] = useState<Indicator[]>([]);
   const [selectedIndicator, setSelectedIndicator] = useState<string>('gdp_usd');
@@ -78,7 +81,8 @@ const PredictionDashboard: React.FC = () => {
 
   // Cargar indicadores
   useEffect(() => {
-    fetch('http://127.0.0.1:8000/api/china/indicadores/lista')
+    // ✅ CORRECTO: Usar API_BASE_URL
+    fetch(`${API_BASE_URL}/api/china/indicadores/lista`)
       .then(res => res.json())
       .then(data => {
         const filtered = data.filter((ind: Indicator) => 
@@ -93,7 +97,8 @@ const PredictionDashboard: React.FC = () => {
   useEffect(() => {
     if (!selectedIndicator) return;
     
-    fetch('http://127.0.0.1:8000/api/china/datos/historicos?skip=0&limit=100')
+    // ✅ CORRECTO: Usar API_BASE_URL
+    fetch(`${API_BASE_URL}/api/china/datos/historicos?skip=0&limit=100`)
       .then(res => res.json())
       .then(data => {
         const filtered = data.filter((item: any) => item.year >= 1991);
@@ -108,7 +113,8 @@ const PredictionDashboard: React.FC = () => {
     
     setLoading(true);
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/china/predicciones/forecast', {
+      // ✅ CORRECTO: Usar API_BASE_URL
+      const response = await fetch(`${API_BASE_URL}/api/china/predicciones/forecast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

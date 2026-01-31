@@ -14,6 +14,9 @@ const AnalisisTendencias: React.FC<AnalisisTendenciasProps> = ({
   const [loadingTendencias, setLoadingTendencias] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  // ✅ CORRECTO: Usar import.meta.env para Vite
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+  
   useEffect(() => {
     if (selectedIndicator) {
       cargarTendencias(selectedIndicator);
@@ -25,8 +28,9 @@ const AnalisisTendencias: React.FC<AnalisisTendenciasProps> = ({
       setLoadingTendencias(true);
       setError(null);
       
+      // ✅ CORRECTO: Usar API_BASE_URL dinámico
       const response = await fetch(
-        `http://127.0.0.1:8000/api/china/analisis/analisis/tendencias?indicador=${indicador}`
+        `${API_BASE_URL}/api/china/analisis/analisis/tendencias?indicador=${indicador}`
       );
       
       if (!response.ok) throw new Error('Error al cargar tendencias');
