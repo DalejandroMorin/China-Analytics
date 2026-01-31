@@ -4,7 +4,7 @@ import type { HistoricalData, HistoricalDataTableProps, SortConfig, Indicator } 
 import { columnCategories, formatValue, getVisibleColumns, isSortableColumn } from './HistoricalDataTable.utils';
 
 // ✅ CORRECTO: Definir API_BASE_URL para Vite (igual que en PredictionDashboard)
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.onrender.com';
 
 // Definir la interfaz del payload para el tooltip
 interface CustomTooltipPayload {

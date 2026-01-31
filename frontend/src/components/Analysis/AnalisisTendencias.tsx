@@ -15,7 +15,7 @@ const AnalisisTendencias: React.FC<AnalisisTendenciasProps> = ({
   const [error, setError] = useState<string | null>(null);
   
   // ✅ CORRECTO: Usar import.meta.env para Vite
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.onrender.com';
   
   useEffect(() => {
     if (selectedIndicator) {

@@ -8,7 +8,7 @@ import ModalCorrelaciones from './ModalCorrelaciones';
 import { dashboardServices } from '../../services/api';
 
 // ✅ CORRECTO: Definir API_BASE_URL para Vite (igual que en otros componentes)
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.onrender.com';
 
 // Definir los 6 indicadores principales para las tarjetas KPI
 const INDICADORES_PRINCIPALES = [
