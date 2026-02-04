@@ -919,6 +919,8 @@ const Dashboard: React.FC = () => {
         <div>
           <SystemStatus data={systemStatus} loading={loading.system} />
         </div>
+      </div>
+
       <div className="bg-gradient-to-r from-stone-50 to-stone-100 rounded-2xl p-6 border border-stone-200">
         <h3 className="text-lg font-semibold text-stone-800 mb-4 flex items-center">
           <svg className="w-5 h-5 mr-2 text-stone-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
