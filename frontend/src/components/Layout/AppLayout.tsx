@@ -34,10 +34,10 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   }, [location.pathname, isMobile]);
   
   const navItems = [
-    { path: '/', label: '🏠 Dashboard', color: 'sky', icon: '🏠' },
-    { path: '/datos', label: '📊 Datos Históricos', color: 'blue', icon: '📊' },
-    { path: '/analisis', label: '📈 Análisis', color: 'emerald', icon: '📈' },
-    { path: '/predicciones', label: '🤖 Predicciones ML', color: 'violet', icon: '🤖' },
+    { path: '/', label: 'Dashboard', color: 'sky', icon: '🏠' },
+    { path: '/datos', label: 'Datos Históricos', color: 'blue', icon: '📊' },
+    { path: '/analisis', label: 'Análisis', color: 'emerald', icon: '📈' },
+    { path: '/predicciones', label: 'Predicciones ML', color: 'violet', icon: '🤖' },
   ];
 
   // Cerrar sidebar al hacer clic fuera (solo en móvil)
