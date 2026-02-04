@@ -1,3 +1,4 @@
+// src/components/Dashboard/KpiCard.tsx - VERSIÓN RESPONSIVE COMPLETA
 import React, { useState } from 'react';
 
 interface KpiCardProps {
@@ -93,17 +94,17 @@ const KpiCard: React.FC<KpiCardProps> = ({
 
   const trendIcons = {
     up: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
       </svg>
     ),
     down: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
       </svg>
     ),
     neutral: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14" />
       </svg>
     )
@@ -131,96 +132,115 @@ const KpiCard: React.FC<KpiCardProps> = ({
   };
 
   return (
-    <div className={`bg-white rounded-2xl p-6 border ${currentColor.border} ${currentColor.bg} shadow-sm hover:shadow-md transition-all duration-300 ${expanded ? 'ring-2 ring-opacity-50 ' + currentColor.accent.replace('bg-', 'ring-') : ''}`}>
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex-1">
-          <div className="flex items-center">
-            <span className="text-2xl mr-3">{icon}</span>
-            <div>
-              <h3 className="text-lg font-semibold">{title}</h3>
-              <p className="text-sm opacity-75 mt-1">{description}</p>
-            </div>
+    <div className={`bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 border ${currentColor.border} ${currentColor.bg} shadow-sm hover:shadow-md transition-all duration-300 ${expanded ? 'ring-2 ring-opacity-50 ' + currentColor.accent.replace('bg-', 'ring-') : ''}`}>
+      
+      {/* Header - COMPLETAMENTE RESPONSIVE */}
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-3 sm:mb-4 gap-2 sm:gap-3">
+        <div className="flex items-start w-full sm:flex-1">
+          <span className="text-2xl sm:text-3xl mr-2 sm:mr-3 mt-0.5 sm:mt-1 flex-shrink-0">{icon}</span>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-base sm:text-lg font-semibold text-stone-800 line-clamp-1 break-words">{title}</h3>
+            <p className="text-xs sm:text-sm text-stone-600 mt-1 sm:mt-1.5 line-clamp-2 sm:line-clamp-1">{description}</p>
           </div>
         </div>
-        <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+        
+        {/* Badge de tendencia - Adapta tamaño y posición */}
+        <div className={`inline-flex items-center justify-center sm:justify-start px-2.5 sm:px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium w-fit sm:w-auto mt-1 sm:mt-0 ${
           trend === 'up' 
-            ? 'bg-emerald-100 text-emerald-800' 
+            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
             : trend === 'down'
-            ? 'bg-rose-100 text-rose-800'
-            : 'bg-stone-100 text-stone-800'
+            ? 'bg-rose-100 text-rose-800 border border-rose-200'
+            : 'bg-stone-100 text-stone-800 border border-stone-200'
         }`}>
           {trendIcons[trend]}
-          <span className="ml-1">{change}</span>
+          <span className="ml-1.5 sm:ml-2 whitespace-nowrap">{change}</span>
         </div>
       </div>
       
-      {/* Valor Principal */}
-      <div className="mt-6 mb-6">
-        <div className="text-3xl font-bold mb-2">{value}</div>
-        <div className="flex items-center text-sm text-stone-600">
-          <span className={`inline-flex items-center px-2 py-1 rounded ${currentColor.light} text-xs`}>
-            <span className="mr-1">{getTendenciaIcon()}</span>
-            {tipoTendencia.replace('_', ' ').toUpperCase()}
+      {/* Valor Principal - Tamaño adaptable */}
+      <div className="mt-3 sm:mt-5 mb-3 sm:mb-5">
+        <div className="text-2xl sm:text-3xl md:text-3xl font-bold text-stone-900 mb-1.5 sm:mb-2 break-all sm:break-words leading-tight">{value}</div>
+        <div className="flex flex-col xs:flex-row xs:items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-stone-600">
+          <span className={`inline-flex items-center justify-center xs:justify-start px-2 sm:px-2.5 py-1 sm:py-1 rounded ${currentColor.light} ${currentColor.text} text-xs font-medium w-fit max-w-full`}>
+            <span className="mr-1 sm:mr-1.5">{getTendenciaIcon()}</span>
+            <span className="truncate">{tipoTendencia.replace('_', ' ').toUpperCase()}</span>
           </span>
-          <span className="mx-2">•</span>
-          <span>Período: {periodo}</span>
+          <span className="hidden xs:inline text-stone-400 mx-1">•</span>
+          <span className="text-stone-500 truncate">Período: {periodo}</span>
         </div>
       </div>
       
-      {/* Barra de Progreso (Representando el crecimiento) */}
-      <div className="mb-6">
-        <div className="flex justify-between text-xs text-stone-600 mb-1">
-          <span>Inicio: {valorInicial}</span>
-          <span>Crecimiento: {crecimientoTotal.toFixed(1)}%</span>
+      {/* Barra de Progreso - Reducida en móvil */}
+      <div className="mb-3 sm:mb-5">
+        <div className="flex flex-col xs:flex-row xs:justify-between text-xs text-stone-600 mb-1 gap-0.5">
+          <span className="truncate text-stone-500">Inicio: <span className="font-medium">{valorInicial}</span></span>
+          <span className="truncate text-stone-500">Crecimiento: <span className="font-medium">{crecimientoTotal.toFixed(1)}%</span></span>
         </div>
-        <div className="h-2 bg-white rounded-full overflow-hidden">
+        <div className="h-1.5 sm:h-2 bg-white rounded-full overflow-hidden border border-white/30">
           <div 
-            className={`h-full rounded-full ${currentColor.accent}`}
+            className={`h-full rounded-full ${currentColor.accent} transition-all duration-500`}
             style={{ width: `${Math.min(100, (crecimientoTotal / 50) * 100)}%` }}
             title={`Crecimiento total: ${crecimientoTotal.toFixed(2)}%`}
           ></div>
         </div>
+        <div className="flex justify-between text-[10px] sm:text-xs text-stone-400 mt-0.5">
+          <span>0%</span>
+          <span>25%</span>
+          <span>50%</span>
+          <span>75%</span>
+          <span>100%</span>
+        </div>
       </div>
       
-      {/* Análisis Expandido (Visible solo si expanded=true) */}
+      {/* Análisis Expandido - Grid responsivo */}
       {expanded && (
-        <div className="mt-6 pt-6 border-t border-white/50 animate-fadeIn">
-          <h4 className="font-medium mb-3 text-sm uppercase tracking-wider opacity-75">Análisis de Crecimiento</h4>
-          <div className="grid grid-cols-2 gap-3">
-            <div className={`p-3 rounded-lg ${currentColor.light}`}>
-              <p className="text-xs opacity-75">CAGR Global</p>
-              <p className="text-lg font-bold">{cagr.toFixed(2)}%</p>
-              <p className="text-xs mt-1">Tasa anual compuesta</p>
+        <div className="mt-3 sm:mt-5 pt-3 sm:pt-5 border-t border-white/50 animate-fadeIn">
+          <h4 className="font-medium mb-2 sm:mb-3 text-xs sm:text-sm uppercase tracking-wider text-stone-700">Análisis de Crecimiento</h4>
+          <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 sm:gap-3">
+            <div className={`p-2.5 sm:p-3 rounded-lg ${currentColor.light} ${currentColor.text}`}>
+              <p className="text-xs text-stone-600 mb-0.5">CAGR Global</p>
+              <p className="text-base sm:text-lg font-bold">{cagr.toFixed(2)}%</p>
+              <p className="text-xs text-stone-500 mt-0.5 sm:mt-1 truncate">Tasa anual compuesta</p>
             </div>
-            <div className={`p-3 rounded-lg ${currentColor.light}`}>
-              <p className="text-xs opacity-75">Promedio Anual</p>
-              <p className="text-lg font-bold">{crecimientoAnual.toFixed(2)}%</p>
-              <p className="text-xs mt-1">Crecimiento medio anual</p>
+            <div className={`p-2.5 sm:p-3 rounded-lg ${currentColor.light} ${currentColor.text}`}>
+              <p className="text-xs text-stone-600 mb-0.5">Promedio Anual</p>
+              <p className="text-base sm:text-lg font-bold">{crecimientoAnual.toFixed(2)}%</p>
+              <p className="text-xs text-stone-500 mt-0.5 sm:mt-1 truncate">Crecimiento medio anual</p>
             </div>
           </div>
-          <div className="mt-4 text-sm">
-            <p className="opacity-75">
-              El indicador creció un {crecimientoTotal.toFixed(2)}% desde {periodo.split('-')[0]} hasta {periodo.split('-')[1]}
+          <div className="mt-2 sm:mt-3 text-xs sm:text-sm">
+            <p className="text-stone-600 leading-relaxed">
+              El indicador creció un <span className="font-semibold">{crecimientoTotal.toFixed(2)}%</span> desde <span className="font-semibold">{periodo.split('-')[0]}</span> hasta <span className="font-semibold">{periodo.split('-')[1]}</span>
             </p>
           </div>
         </div>
       )}
       
-      {/* Footer con acción */}
-      <div className="mt-6 pt-6 border-t border-white/50">
-        <div className="flex items-center justify-between">
-          <div className="text-sm">
+      {/* Footer - Botón táctil optimizado */}
+      <div className="mt-3 sm:mt-5 pt-3 sm:pt-5 border-t border-white/50">
+        <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 sm:gap-3">
+          <div className="text-xs sm:text-sm">
             <div className="flex items-center">
-              <span className={`inline-block w-2 h-2 rounded-full ${currentColor.accent} mr-2`}></span>
-              <span className="opacity-75">Análisis: {periodo}</span>
+              <span className={`inline-block w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${currentColor.accent} mr-1.5 sm:mr-2 flex-shrink-0`}></span>
+              <span className="text-stone-600 truncate">Análisis: {periodo}</span>
             </div>
           </div>
           <button 
             onClick={handleCardClick}
-            className={`text-sm font-medium px-4 py-2 rounded-lg transition-all ${currentColor.light} hover:${currentColor.dark} active:scale-95`}
+            className={`text-xs sm:text-sm font-medium px-3 sm:px-4 py-2.5 rounded-lg transition-all ${currentColor.light} hover:${currentColor.dark} active:scale-95 w-full xs:w-auto min-h-[44px] flex items-center justify-center border ${currentColor.border} focus:outline-none focus:ring-2 focus:ring-offset-1 ${currentColor.accent.replace('bg-', 'focus:ring-')}`}
+            aria-label={expanded ? "Ocultar análisis detallado" : "Mostrar análisis detallado"}
           >
-            {expanded ? 'Ver menos' : 'Ver análisis'}
+            <span className="truncate">
+              {expanded ? 'Ver menos' : 'Ver análisis'}
+            </span>
+            <svg 
+              className={`ml-1.5 sm:ml-2 w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
           </button>
         </div>
       </div>
