@@ -1,4 +1,4 @@
-// src/components/Layout/AppLayout.tsx - VERSIÓN RESPONSIVE COMPLETA
+// src/components/Layout/AppLayout.tsx - CON OVERLAY BLANCO TRANSPARENTE
 import type { ReactNode } from 'react';
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -33,6 +33,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     }
   }, [location.pathname, isMobile]);
   
+  // CORREGIDO: Quitamos los emojis duplicados del label
   const navItems = [
     { path: '/', label: 'Dashboard', color: 'sky', icon: '🏠' },
     { path: '/datos', label: 'Datos Históricos', color: 'blue', icon: '📊' },
@@ -47,12 +48,26 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     }
   };
 
+  // Mapear colores a clases Tailwind para evitar advertencias
+  const getColorClasses = (color: string, isActive: boolean) => {
+    if (!isActive) return 'text-stone-600 hover:bg-stone-50 hover:text-stone-800';
+    
+    const colorMap: Record<string, string> = {
+      'sky': 'bg-sky-50 text-sky-700 border-l-4 border-sky-500',
+      'blue': 'bg-blue-50 text-blue-700 border-l-4 border-blue-500',
+      'emerald': 'bg-emerald-50 text-emerald-700 border-l-4 border-emerald-500',
+      'violet': 'bg-violet-50 text-violet-700 border-l-4 border-violet-500',
+    };
+    
+    return colorMap[color] || 'bg-sky-50 text-sky-700 border-l-4 border-sky-500';
+  };
+
   return (
     <div className="min-h-screen bg-stone-50 flex">
-      {/* Overlay para móvil (solo visible cuando sidebar está abierto) */}
+      {/* Overlay para móvil - BLANCO TRANSPARENTE COMO EN MODAL */}
       {sidebarOpen && isMobile && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+          className="fixed inset-0 bg-white/30 backdrop-blur-sm z-40 md:hidden"
           onClick={handleOverlayClick}
         />
       )}
@@ -91,11 +106,11 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           </div>
         </div>
         
-        {/* Navegación */}
+        {/* Navegación - CORREGIDO: Solo un emoji por item */}
         <nav className="p-3 md:p-4 space-y-1">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;
-            const colorClass = `bg-${item.color}-50 text-${item.color}-700 border-l-4 border-${item.color}-500`;
+            const colorClass = getColorClasses(item.color, isActive);
             const inactiveClass = 'text-stone-600 hover:bg-stone-50 hover:text-stone-800';
             
             return (
@@ -105,7 +120,9 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                 className={`flex items-center px-3 md:px-4 py-3 rounded-lg transition-all ${isActive ? colorClass : inactiveClass}`}
                 onClick={() => isMobile && setSidebarOpen(false)}
               >
+                {/* Solo un emoji aquí */}
                 <span className="text-lg md:text-xl mr-3 flex-shrink-0">{item.icon}</span>
+                {/* Texto sin emoji */}
                 <span className="font-medium truncate">{item.label}</span>
                 {isActive && (
                   <span className="ml-auto flex-shrink-0">
