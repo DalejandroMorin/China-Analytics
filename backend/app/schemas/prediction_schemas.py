@@ -1,5 +1,3 @@
-# app/schemas/prediction_schemas.py
-
 from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import List, Optional, Dict, Any
