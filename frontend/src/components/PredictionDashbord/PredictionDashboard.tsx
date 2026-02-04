@@ -1,4 +1,4 @@
-// PredictionDashboard.tsx - Versión simplificada
+// PredictionDashboard.tsx - Versión actualizada para rango 2013-2025
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area } from 'recharts';
 
@@ -25,13 +25,19 @@ interface Metrics {
   calidad_prediccion: string;
 }
 
+// Interface actualizada para el nuevo resumen
 interface Summary {
-  valor_2020: number;
-  valor_2030: number;
+  // Campos nuevos para rango 2013-2025
+  valor_inicio: number;
+  valor_ultimo_historico: number;
+  valor_fin_prediccion: number;
+  crecimiento_entrenamiento_pct: number;
   crecimiento_total_pct: number;
-  cagr_2020_2030: number;
+  cagr_total: number;
   tendencia_principal: string;
-  años_proyectados: number;
+  años_entrenamiento: string;
+  años_prediccion: string;
+  rango_completo: string;
 }
 
 interface PredictionResponse {
@@ -47,20 +53,32 @@ interface PredictionResponse {
     tiempo_procesamiento_segundos: number;
     modelo_seleccionado: string;
     calidad_datos: string;
+    anio_inicio_entrenamiento: number;
+    anios_prediccion: number;
+    configuracion_solicitud?: {
+      anio_inicio_solicitado: number;
+      forzar_rango: boolean;
+      horizonte_solicitado: string;
+    };
   };
   resumen: Summary;
 }
 
 const PredictionDashboard: React.FC = () => {
-  // ✅ CORRECTO: Definir API_BASE_URL para Vite
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.onrender.com';
+  // ✅ Definir API_BASE_URL para Vite
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.onrender.com';
 
-  // Estados
+  // Estados principales
   const [indicators, setIndicators] = useState<Indicator[]>([]);
   const [selectedIndicator, setSelectedIndicator] = useState<string>('gdp_usd');
   const [loading, setLoading] = useState<boolean>(false);
   const [predictionData, setPredictionData] = useState<PredictionResponse | null>(null);
   const [historicalData, setHistoricalData] = useState<any[]>([]);
+
+  // ✅ Nuevos estados para controlar el rango
+  const [rangoEntrenamiento, setRangoEntrenamiento] = useState<string>('2013');
+  const [aniosPrediccion, setAniosPrediccion] = useState<number>(5);
+  const [forzarRango, setForzarRango] = useState<boolean>(true);
 
   // Colores
   const colors = {
@@ -81,55 +99,70 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.on
 
   // Cargar indicadores
   useEffect(() => {
-    // ✅ CORRECTO: Usar API_BASE_URL
     fetch(`${API_BASE_URL}/api/china/indicadores/lista`)
       .then(res => res.json())
       .then(data => {
-        const filtered = data.filter((ind: Indicator) => 
-          ind.field !== 'year' && ind.field !== 'country'
-        );
+        // Filtrar solo indicadores relevantes
+        const filtered = data.indicadores ? 
+          data.indicadores.filter((ind: Indicator) => 
+            ind.field !== 'year' && ind.field !== 'country'
+          ) : 
+          data.filter((ind: Indicator) => 
+            ind.field !== 'year' && ind.field !== 'country'
+          );
         setIndicators(filtered);
       })
       .catch(err => console.error('Error cargando indicadores:', err));
   }, []);
 
-  // Cargar datos históricos
+  // Cargar datos históricos (filtrado por rango seleccionado)
   useEffect(() => {
     if (!selectedIndicator) return;
     
-    // ✅ CORRECTO: Usar API_BASE_URL
     fetch(`${API_BASE_URL}/api/china/datos/historicos?skip=0&limit=100`)
       .then(res => res.json())
       .then(data => {
-        const filtered = data.filter((item: any) => item.year >= 1991);
+        // Filtrar datos desde el año seleccionado
+        const anioInicio = parseInt(rangoEntrenamiento);
+        const filtered = data.filter((item: any) => item.year >= anioInicio);
         setHistoricalData(filtered);
       })
       .catch(err => console.error('Error cargando datos históricos:', err));
-  }, [selectedIndicator]);
+  }, [selectedIndicator, rangoEntrenamiento]);
 
-  // Generar predicción con modelo automático
+  // ✅ Generar predicción con rango personalizado (2013-2025 por defecto)
   const handlePredict = async () => {
     if (!selectedIndicator) return;
     
     setLoading(true);
     try {
-      // ✅ CORRECTO: Usar API_BASE_URL
+      const anioInicio = parseInt(rangoEntrenamiento);
+      
       const response = await fetch(`${API_BASE_URL}/api/china/predicciones/forecast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           indicador: selectedIndicator,
           modelo: 'auto', // SIEMPRE automático
-          horizonte: 'completo',
-          incluir_metricas: true
+          horizonte: 'corto_plazo', // Cambiado a corto_plazo para 5 años
+          incluir_metricas: true,
+          // ✅ NUEVOS PARÁMETROS PARA RANGO PERSONALIZADO
+          anio_inicio_entrenamiento: anioInicio,
+          anios_prediccion: aniosPrediccion,
+          forzar_rango: forzarRango
         })
       });
       
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `Error ${response.status}`);
+      }
+      
       const data = await response.json();
       setPredictionData(data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generando predicción:', error);
-      alert('Error al generar predicción. Por favor, intenta de nuevo.');
+      alert(`Error: ${error.message || 'No se pudo generar la predicción'}`);
     } finally {
       setLoading(false);
     }
@@ -138,18 +171,21 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.on
   // Preparar datos para el gráfico
   const getChartData = () => {
     const data: any[] = [];
+    const anioInicio = parseInt(rangoEntrenamiento);
     
-    // Agregar datos históricos (1991-2020)
+    // Agregar datos históricos filtrados
     historicalData.forEach(item => {
-      data.push({
-        año: item.year,
-        valor: item[selectedIndicator] || 0,
-        tipo: 'histórico',
-        fuente: 'real'
-      });
+      if (item.year >= anioInicio) {
+        data.push({
+          año: item.year,
+          valor: item[selectedIndicator] || 0,
+          tipo: 'histórico',
+          fuente: 'real'
+        });
+      }
     });
     
-    // Agregar predicciones (2021-2030)
+    // Agregar predicciones (solo los años predichos)
     if (predictionData) {
       predictionData.predicciones.forEach(pred => {
         data.push({
@@ -174,6 +210,11 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.on
     if (num >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
     if (num >= 1e3) return `$${(num / 1e3).toFixed(2)}K`;
     return `$${num.toFixed(2)}`;
+  };
+
+  // Formatear números para porcentajes
+  const formatPercentage = (num: number): string => {
+    return `${num.toFixed(2)}%`;
   };
 
   // Obtener unidad del indicador seleccionado
@@ -212,7 +253,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.on
               {formatNumber(dataItem.valor)} {unit}
             </span>
           </p>
-          {isPrediction && dataItem.crecimiento && (
+          {isPrediction && dataItem.crecimiento !== undefined && (
             <p style={{ margin: '4px 0' }}>
               <span style={{ fontWeight: 500, color: colors.cafe[700] }}>Crecimiento: </span>
               <span style={{ 
@@ -235,6 +276,15 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.on
       );
     }
     return null;
+  };
+
+  // Obtener rango de predicción del último año
+  const getPredictionRange = () => {
+    if (!predictionData || !predictionData.predicciones.length) return '';
+    
+    const firstYear = predictionData.predicciones[0].año;
+    const lastYear = predictionData.predicciones[predictionData.predicciones.length - 1].año;
+    return `${firstYear}-${lastYear}`;
   };
 
   return (
@@ -272,7 +322,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.on
           Predicciones Económicas de China
         </h1>
         <p style={{ color: colors.cafe[600], fontSize: '16px' }}>
-          Genera predicciones hasta 2030 usando modelos de Machine Learning automáticos
+          Genera predicciones personalizadas usando modelos de Machine Learning automáticos
         </p>
         <div style={{
           marginTop: '12px',
@@ -282,10 +332,10 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.on
           display: 'inline-block'
         }}>
           <span style={{ color: colors.azul[800], fontWeight: 600 }}>
-            ⚡ Modelo Automático: 
+            📅 Rango por defecto: 
           </span>
           <span style={{ color: colors.cafe[600], marginLeft: '8px' }}>
-            El sistema selecciona automáticamente el mejor algoritmo para cada indicador
+            Entrenamiento: 2013-2020 | Predicción: 2021-2025
           </span>
         </div>
       </div>
@@ -336,6 +386,120 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.on
               {indicators.find(ind => ind.field === selectedIndicator)?.description}
             </p>
           )}
+        </div>
+
+        {/* Controles de rango */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '20px',
+          marginBottom: '20px'
+        }}>
+          {/* Selector de rango de entrenamiento */}
+          <div>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontWeight: 600,
+              color: colors.azul[800],
+              fontSize: '14px'
+            }}>
+              📅 Año inicio entrenamiento:
+            </label>
+            <select
+              value={rangoEntrenamiento}
+              onChange={(e) => setRangoEntrenamiento(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: '10px',
+                border: `1px solid ${colors.crema[300]}`,
+                backgroundColor: 'white',
+                color: colors.cafe[800],
+                fontSize: '14px',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="1991">1991 (todos los datos)</option>
+              <option value="2000">2000 (siglo XXI)</option>
+              <option value="2010">2010 (década reciente)</option>
+              <option value="2013">2013 (recomendado)</option>
+              <option value="2015">2015 (más reciente)</option>
+            </select>
+          </div>
+
+          {/* Selector de años de predicción */}
+          <div>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontWeight: 600,
+              color: colors.azul[800],
+              fontSize: '14px'
+            }}>
+              🔮 Años a predecir:
+            </label>
+            <select
+              value={aniosPrediccion}
+              onChange={(e) => setAniosPrediccion(parseInt(e.target.value))}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: '10px',
+                border: `1px solid ${colors.crema[300]}`,
+                backgroundColor: 'white',
+                color: colors.cafe[800],
+                fontSize: '14px',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="3">3 años</option>
+              <option value="5">5 años (2021-2025)</option>
+              <option value="10">10 años (2021-2030)</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Opción forzar rango */}
+        <div style={{
+          backgroundColor: colors.crema[50],
+          padding: '12px 16px',
+          borderRadius: '10px',
+          marginBottom: '20px',
+          border: `1px solid ${colors.crema[200]}`
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <input
+              type="checkbox"
+              id="forzarRango"
+              checked={forzarRango}
+              onChange={(e) => setForzarRango(e.target.checked)}
+              style={{
+                marginRight: '10px',
+                width: '18px',
+                height: '18px',
+                cursor: 'pointer'
+              }}
+            />
+            <label htmlFor="forzarRango" style={{
+              color: colors.cafe[700],
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}>
+              Forzar año de inicio especificado
+            </label>
+          </div>
+          <p style={{
+            marginTop: '4px',
+            color: colors.cafe[500],
+            fontSize: '12px',
+            marginLeft: '28px'
+          }}>
+            Si está desmarcado, el sistema usará el primer año con datos disponibles
+          </p>
         </div>
 
         {/* Información del modelo automático */}
@@ -392,7 +556,10 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.on
             fontWeight: 600,
             cursor: loading ? 'not-allowed' : 'pointer',
             opacity: loading ? 0.7 : 1,
-            transition: 'all 0.3s'
+            transition: 'all 0.3s',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
           }}
           onMouseEnter={(e) => {
             if (!loading) e.currentTarget.style.backgroundColor = colors.azul[600];
@@ -402,7 +569,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.on
           }}
         >
           {loading ? (
-            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <>
               <span style={{
                 display: 'inline-block',
                 width: '20px',
@@ -414,8 +581,8 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.on
                 animation: 'spin 1s linear infinite'
               }} />
               Generando Predicción...
-            </span>
-          ) : '🔮 Generar Predicción Automática'}
+            </>
+          ) : `🔮 Generar Predicción (${rangoEntrenamiento}-${2020 + aniosPrediccion})`}
         </button>
         <style>{`
           @keyframes spin {
@@ -452,7 +619,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.on
                 fontWeight: 500,
                 color: colors.cafe[600]
               }}>
-                (1991-2030)
+                ({predictionData.metadatos.rango_entrenamiento} → {predictionData.metadatos.horizonte_prediccion})
               </span>
               <span style={{
                 marginLeft: 'auto',
@@ -546,7 +713,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.on
                   backgroundColor: colors.azul[500],
                   marginRight: '8px'
                 }} />
-                <span style={{ color: colors.cafe[700], fontSize: '14px' }}>Datos históricos</span>
+                <span style={{ color: colors.cafe[700], fontSize: '14px' }}>Datos históricos ({predictionData.metadatos.rango_entrenamiento})</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center' }}>
                 <div style={{
@@ -555,7 +722,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.on
                   backgroundColor: colors.azul[500],
                   marginRight: '8px'
                 }} />
-                <span style={{ color: colors.cafe[700], fontSize: '14px' }}>Predicciones 2021-2030</span>
+                <span style={{ color: colors.cafe[700], fontSize: '14px' }}>Predicciones ({predictionData.metadatos.horizonte_prediccion})</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center' }}>
                 <div style={{
@@ -655,7 +822,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.on
               </div>
             </div>
 
-            {/* Resumen */}
+            {/* Resumen actualizado */}
             <div style={{
               backgroundColor: colors.crema[50],
               padding: '20px',
@@ -670,32 +837,59 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.on
                 display: 'flex',
                 alignItems: 'center'
               }}>
-                <span style={{ marginRight: '8px' }}>📈</span> Resumen 2020-2030
+                <span style={{ marginRight: '8px' }}>📈</span> Resumen {predictionData.resumen.rango_completo}
+                <span style={{
+                  marginLeft: '12px',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  color: colors.cafe[600],
+                  backgroundColor: colors.azul[100],
+                  padding: '4px 8px',
+                  borderRadius: '12px'
+                }}>
+                  Rango Personalizado
+                </span>
               </h3>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div>
-                  <p style={{ color: colors.cafe[600], fontSize: '14px', marginBottom: '4px' }}>Valor en 2020</p>
+                  <p style={{ color: colors.cafe[600], fontSize: '14px', marginBottom: '4px' }}>
+                    Valor inicio ({predictionData.metadatos.rango_entrenamiento.split('-')[0]})
+                  </p>
                   <p style={{ fontSize: '20px', fontWeight: 700, color: colors.azul[700] }}>
-                    {formatNumber(predictionData.resumen.valor_2020)}
+                    {formatNumber(predictionData.resumen.valor_inicio)}
                   </p>
                 </div>
                 <div>
-                  <p style={{ color: colors.cafe[600], fontSize: '14px', marginBottom: '4px' }}>Valor proyectado 2030</p>
+                  <p style={{ color: colors.cafe[600], fontSize: '14px', marginBottom: '4px' }}>
+                    Valor último histórico ({predictionData.metadatos.rango_entrenamiento.split('-')[1]})
+                  </p>
                   <p style={{ fontSize: '20px', fontWeight: 700, color: colors.azul[700] }}>
-                    {formatNumber(predictionData.resumen.valor_2030)}
+                    {formatNumber(predictionData.resumen.valor_ultimo_historico)}
                   </p>
                 </div>
                 <div>
-                  <p style={{ color: colors.cafe[600], fontSize: '14px', marginBottom: '4px' }}>Crecimiento total</p>
+                  <p style={{ color: colors.cafe[600], fontSize: '14px', marginBottom: '4px' }}>
+                    Valor fin predicción ({predictionData.metadatos.horizonte_prediccion.split('-')[1]})
+                  </p>
+                  <p style={{ fontSize: '20px', fontWeight: 700, color: colors.azul[700] }}>
+                    {formatNumber(predictionData.resumen.valor_fin_prediccion)}
+                  </p>
+                </div>
+                <div>
+                  <p style={{ color: colors.cafe[600], fontSize: '14px', marginBottom: '4px' }}>
+                    Crecimiento total ({predictionData.resumen.rango_completo})
+                  </p>
                   <p style={{ fontSize: '24px', fontWeight: 700, color: colors.azul[700] }}>
-                    {predictionData.resumen.crecimiento_total_pct.toFixed(1)}%
+                    {formatPercentage(predictionData.resumen.crecimiento_total_pct)}
                   </p>
                 </div>
                 <div>
-                  <p style={{ color: colors.cafe[600], fontSize: '14px', marginBottom: '4px' }}>Crecimiento anual (CAGR)</p>
+                  <p style={{ color: colors.cafe[600], fontSize: '14px', marginBottom: '4px' }}>
+                    CAGR anual ({predictionData.resumen.rango_completo})
+                  </p>
                   <p style={{ fontSize: '20px', fontWeight: 700, color: colors.azul[700] }}>
-                    {predictionData.resumen.cagr_2020_2030.toFixed(2)}%
+                    {formatPercentage(predictionData.resumen.cagr_total)}
                   </p>
                 </div>
                 <div>
@@ -706,7 +900,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.on
                     color: colors.azul[700],
                     textTransform: 'capitalize'
                   }}>
-                    {predictionData.resumen.tendencia_principal.replace('_', ' ')}
+                    {predictionData.resumen.tendencia_principal.replace(/_/g, ' ')}
                   </p>
                 </div>
               </div>
@@ -729,7 +923,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.on
               display: 'flex',
               alignItems: 'center'
             }}>
-              <span style={{ marginRight: '8px' }}>📋</span> Predicciones Detalladas por Año
+              <span style={{ marginRight: '8px' }}>📋</span> Predicciones Detalladas por Año ({predictionData.metadatos.horizonte_prediccion})
             </h3>
             
             <div style={{ overflowX: 'auto' }}>
@@ -756,7 +950,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.on
                       fontWeight: 600,
                       color: colors.azul[900],
                       borderBottom: `2px solid ${colors.azul[200]}`
-                    }}>Crecimiento</th>
+                    }}>Crecimiento Anual</th>
                     <th style={{
                       padding: '12px 16px',
                       textAlign: 'left',
@@ -806,10 +1000,68 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://china-analytics.on
               * Los intervalos de confianza indican el rango donde se espera que esté el valor real con 80% de probabilidad
             </p>
           </div>
+
+          {/* Metadatos técnicos */}
+          <div style={{
+            backgroundColor: colors.crema[50],
+            padding: '20px',
+            borderRadius: '16px',
+            border: `1px solid ${colors.crema[300]}`
+          }}>
+            <h3 style={{
+              fontSize: '16px',
+              fontWeight: 700,
+              color: colors.azul[900],
+              marginBottom: '12px',
+              display: 'flex',
+              alignItems: 'center'
+            }}>
+              <span style={{ marginRight: '8px' }}>⚙️</span> Metadatos Técnicos
+            </h3>
+            
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+      gap: '12px',
+      fontSize: '14px'
+            }}>
+              <div>
+                <span style={{ color: colors.cafe[600], fontWeight: 600 }}>Rango de entrenamiento:</span>{' '}
+                <span style={{ color: colors.azul[700] }}>{predictionData.metadatos.rango_entrenamiento}</span>
+              </div>
+              <div>
+                <span style={{ color: colors.cafe[600], fontWeight: 600 }}>Horizonte de predicción:</span>{' '}
+                <span style={{ color: colors.azul[700] }}>{predictionData.metadatos.horizonte_prediccion}</span>
+              </div>
+              <div>
+                <span style={{ color: colors.cafe[600], fontWeight: 600 }}>Años entrenamiento:</span>{' '}
+                <span style={{ color: colors.azul[700] }}>{predictionData.metadatos.total_años_entrenamiento}</span>
+              </div>
+              <div>
+                <span style={{ color: colors.cafe[600], fontWeight: 600 }}>Años predicción:</span>{' '}
+                <span style={{ color: colors.azul[700] }}>{predictionData.metadatos.anios_prediccion}</span>
+              </div>
+              <div>
+                <span style={{ color: colors.cafe[600], fontWeight: 600 }}>Calidad datos:</span>{' '}
+                <span style={{ 
+                  color: predictionData.metadatos.calidad_datos === 'excelente' ? '#065F46' : colors.cafe[700],
+                  fontWeight: 600 
+                }}>
+                  {predictionData.metadatos.calidad_datos}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: colors.cafe[600], fontWeight: 600 }}>Última actualización:</span>{' '}
+                <span style={{ color: colors.azul[700] }}>
+                  {new Date(predictionData.metadatos.ultima_actualizacion).toLocaleString()}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
 };
 
-export default PredictionDashboard;
+export default PredictionDashboard; 

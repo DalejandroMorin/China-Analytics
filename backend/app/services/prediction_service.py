@@ -1,4 +1,4 @@
-# app/services/prediction_service.py
+# app/services/prediction_service.py - VERSIÓN COMPLETA CORREGIDA
 
 import numpy as np
 import pandas as pd
@@ -12,6 +12,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 from sklearn.model_selection import TimeSeriesSplit
 import warnings
+import math
 warnings.filterwarnings('ignore')
 
 # Configuración de logging
@@ -22,8 +23,7 @@ class PredictionService:
     """
     Servicio principal para predicciones ML de indicadores de China.
     
-    Implementa múltiples modelos de machine learning para forecasting
-    de series temporales económicas y sociales.
+    Versión corregida para soportar rango personalizado 2013-2025.
     """
     
     def __init__(self):
@@ -54,7 +54,9 @@ class PredictionService:
                 "unidad": self._get_indicator_unit(indicator),
                 "predecible": True,
                 "modelo_recomendado": self._get_recommended_model(indicator),
-                "precision_esperada": self._get_expected_accuracy(indicator)
+                "precision_esperada": self._get_expected_accuracy(indicator),
+                "rango_recomendado": "2013-2020",
+                "años_disponibles": "2013-2020"
             }
             indicator_info.append(info)
         
@@ -65,7 +67,7 @@ class PredictionService:
         historical_data: List[Tuple[int, float]],  # [(año, valor), ...]
         indicator: str,
         model_type: str = "auto",
-        horizon_years: int = 10
+        horizon_years: int = 5,  # ✅ CAMBIADO: De 10 a 5 años por defecto (2021-2025)
     ) -> Dict[str, Any]:
         """
         Predice valores futuros para un indicador usando el modelo especificado.
@@ -74,10 +76,10 @@ class PredictionService:
             historical_data: Datos históricos como lista de tuplas (año, valor)
             indicator: Nombre del indicador a predecir
             model_type: Tipo de modelo a usar ('arima', 'random_forest', 'linear', 'prophet', 'auto')
-            horizon_years: Número de años a predecir (máximo 10)
+            horizon_years: Número de años a predecir (por defecto: 5 para 2021-2025)
         
         Returns:
-            Dict con predicciones, métricas y metadatos
+            Dict con predicciones, métricas y metadatos CORREGIDOS para rango 2013-2025
         """
         start_time = time.time()  # Medir tiempo de procesamiento
         
@@ -119,12 +121,12 @@ class PredictionService:
             # Calcular tiempo de procesamiento real
             processing_time = time.time() - start_time
             
-            # Enriquecer resultado con metadatos
+            # ✅ CORRECCIÓN IMPORTANTE: Pasar historical_data COMPLETA, no solo values
             result.update({
                 "indicador": indicator,
                 "modelo_utilizado": model_type.upper(),
                 "metadatos": self._generate_metadata(years, values, horizon_years, model_type, processing_time),
-                "resumen": self._generate_summary(values, result["predicciones"], horizon_years, years[-1])
+                "resumen": self._generate_summary_corregido(historical_data, result["predicciones"], horizon_years)  # ✅ CAMBIADO
             })
             
             logger.info(f"✅ Predicción completada para {indicator} usando {model_type} en {processing_time:.2f}s")
@@ -135,7 +137,7 @@ class PredictionService:
             raise
 
     # =============================================================================
-    # MÉTODOS DE PREDICCIÓN CORREGIDOS
+    # MÉTODOS DE PREDICCIÓN (MANTENIDOS SIN CAMBIOS)
     # =============================================================================
 
     def _predict_arima_safe(
@@ -147,9 +149,6 @@ class PredictionService:
     ) -> Dict[str, Any]:
         """
         Versión segura de ARIMA que maneja números complejos y datos problemáticos.
-        
-        NOTA: Usamos una implementación simplificada basada en regresión lineal
-        con componentes autoregresivos para evitar problemas de convergencia.
         """
         try:
             # Verificar si es un indicador problemático (porcentajes con alta volatilidad)
@@ -272,9 +271,7 @@ class PredictionService:
         indicator: str
     ) -> Dict[str, Any]:
         """
-        Predicción usando regresión lineal (extensión del análisis existente).
-        
-        Ideal para tendencias lineales claras y estables.
+        Predicción usando regresión lineal.
         """
         try:
             # Preparar datos para regresión
@@ -350,8 +347,6 @@ class PredictionService:
     ) -> Dict[str, Any]:
         """
         Predicción usando Random Forest Regressor.
-        
-        Ideal para relaciones no lineales y patrones complejos.
         """
         try:
             # Crear características adicionales para mejorar el modelo
@@ -365,8 +360,8 @@ class PredictionService:
             
             # Entrenar modelo
             model = RandomForestRegressor(
-                n_estimators=50,  # Reducido para mayor velocidad
-                max_depth=5,      # Reducido para evitar sobreajuste
+                n_estimators=50,
+                max_depth=5,
                 random_state=42,
                 n_jobs=-1
             )
@@ -404,7 +399,6 @@ class PredictionService:
                     new_features = self._update_features(current_features[0], pred, years, values)
                     current_features = new_features.reshape(1, -1)
                 except:
-                    # Si falla la actualización, repetir características
                     break
             
             # Si no pudimos generar todas las predicciones, completar con el último valor
@@ -457,7 +451,6 @@ class PredictionService:
             
         except Exception as e:
             logger.error(f"Error en Random Forest: {str(e)}")
-            # Fallback a regresión lineal
             return self._predict_linear(years, values, horizon_years, indicator)
 
     def _predict_prophet(
@@ -486,13 +479,12 @@ class PredictionService:
             # Añadir componente estacional simplificado (ciclo de 3 años)
             seasonal_component = 0
             if len(values) >= 6:
-                # Detectar ciclo simple
                 cycle_length = 3
                 seasonal_pattern = []
                 for i in range(cycle_length):
                     idx = -cycle_length + i
                     if abs(idx) < len(values):
-                        seasonal_pattern.append(values[idx] * 0.05)  # 5% variación
+                        seasonal_pattern.append(values[idx] * 0.05)
                     else:
                         seasonal_pattern.append(0)
                 
@@ -547,11 +539,131 @@ class PredictionService:
             
         except Exception as e:
             logger.error(f"Error en Prophet: {str(e)}")
-            # Fallback a Random Forest
             return self._predict_random_forest(years, values, horizon_years, indicator)
 
     # =============================================================================
-    # FUNCIONES AUXILIARES (sin cambios, excepto select_best_model)
+    # ✅ NUEVOS MÉTODOS CORREGIDOS
+    # =============================================================================
+
+    def _generate_summary_corregido(
+        self, 
+        historical_data: List[Tuple[int, float]], 
+        predictions: List[Dict], 
+        horizon_years: int
+    ) -> Dict[str, Any]:
+        """
+        ✅ GENERA RESUMEN CORREGIDO para rango personalizado (2013-2025 por defecto).
+        
+        Estructura esperada por frontend y schemas:
+        {
+            "valor_inicio": number,           # Valor del año de inicio (2013)
+            "valor_ultimo_historico": number, # Valor del último año histórico (2020)
+            "valor_fin_prediccion": number,   # Valor del último año predicho (2025)
+            "crecimiento_entrenamiento_pct": number,  # Crecimiento 2013-2020
+            "crecimiento_total_pct": number,          # Crecimiento 2013-2025
+            "cagr_total": number,                     # CAGR 2013-2025
+            "tendencia_principal": string,
+            "años_entrenamiento": string,    # "2013-2020"
+            "años_prediccion": string,       # "2021-2025"
+            "rango_completo": string         # "2013-2025"
+        }
+        """
+        try:
+            if not historical_data:
+                return self._get_empty_summary()
+            
+            # Extraer años y valores
+            years = [item[0] for item in historical_data]
+            values = [item[1] for item in historical_data]
+            
+            anio_inicio = years[0]  # 2013 (o el año real del dataset)
+            anio_fin_historico = years[-1]  # 2020 (o el último año histórico)
+            
+            if not predictions:
+                anio_fin_prediccion = anio_fin_historico
+                valor_fin_prediccion = values[-1]
+            else:
+                anio_fin_prediccion = predictions[-1]["año"]  # 2025 (o el último año predicho)
+                valor_fin_prediccion = predictions[-1]["valor_predicho"]
+            
+            valor_inicio = values[0]
+            valor_ultimo_historico = values[-1]
+            
+            # Calcular crecimiento del período de entrenamiento (2013-2020)
+            crecimiento_entrenamiento = self._calculate_growth_rate(valor_inicio, valor_ultimo_historico)
+            
+            # Calcular crecimiento total (2013-2025)
+            crecimiento_total = self._calculate_growth_rate(valor_inicio, valor_fin_prediccion)
+            
+            # Calcular CAGR para el rango completo (2013-2025)
+            años_totales = anio_fin_prediccion - anio_inicio
+            if años_totales > 0 and valor_inicio != 0:
+                cagr_total = ((valor_fin_prediccion / abs(valor_inicio)) ** (1 / años_totales) - 1) * 100
+            else:
+                cagr_total = 0.0
+            
+            # Determinar tendencia principal
+            tendencia = self._determinar_tendencia_corregida(predictions)
+            
+            return {
+                "valor_inicio": float(valor_inicio),
+                "valor_ultimo_historico": float(valor_ultimo_historico),
+                "valor_fin_prediccion": float(valor_fin_prediccion),
+                "crecimiento_entrenamiento_pct": float(crecimiento_entrenamiento),
+                "crecimiento_total_pct": float(crecimiento_total),
+                "cagr_total": float(cagr_total),
+                "tendencia_principal": tendencia,
+                "años_entrenamiento": f"{anio_inicio}-{anio_fin_historico}",
+                "años_prediccion": f"{anio_fin_historico + 1}-{anio_fin_prediccion}",
+                "rango_completo": f"{anio_inicio}-{anio_fin_prediccion}"
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error generando resumen corregido: {str(e)}")
+            return self._get_empty_summary()
+
+    def _determinar_tendencia_corregida(self, predictions: List[Dict]) -> str:
+        """
+        ✅ Determina tendencia principal basada en predicciones.
+        """
+        if not predictions or len(predictions) < 2:
+            return "tendencia_indeterminada"
+        
+        # Obtener crecimientos anuales de las predicciones
+        crecimientos = [p.get("crecimiento_anual_pct", 0) for p in predictions]
+        crecimiento_promedio = sum(crecimientos) / len(crecimientos)
+        
+        # Determinar categoría basada en crecimiento promedio
+        if crecimiento_promedio > 7:
+            return "crecimiento_acelerado"
+        elif crecimiento_promedio > 4:
+            return "crecimiento_moderado"
+        elif crecimiento_promedio > 1:
+            return "crecimiento_lento"
+        elif crecimiento_promedio > -2:
+            return "estabilizacion"
+        elif crecimiento_promedio > -5:
+            return "desaceleracion_moderada"
+        else:
+            return "contraccion_fuerte"
+
+    def _get_empty_summary(self) -> Dict[str, Any]:
+        """Retorna resumen vacío cuando no hay datos."""
+        return {
+            "valor_inicio": 0.0,
+            "valor_ultimo_historico": 0.0,
+            "valor_fin_prediccion": 0.0,
+            "crecimiento_entrenamiento_pct": 0.0,
+            "crecimiento_total_pct": 0.0,
+            "cagr_total": 0.0,
+            "tendencia_principal": "no_disponible",
+            "años_entrenamiento": "no_disponible",
+            "años_prediccion": "no_disponible",
+            "rango_completo": "no_disponible"
+        }
+
+    # =============================================================================
+    # MÉTODOS AUXILIARES (MANTENIDOS)
     # =============================================================================
 
     def _select_best_model(
@@ -562,13 +674,11 @@ class PredictionService:
     ) -> str:
         """
         Selecciona automáticamente el mejor modelo basado en las características de los datos.
-        
-        CORRECCIÓN: Evitar ARIMA para indicadores problemáticos.
         """
         if len(values) < 8:
-            return "linear"  # Modelo simple para pocos datos
+            return "linear"
         
-        # Lista de indicadores problemáticos para ARIMA (porcentajes con alta volatilidad)
+        # Lista de indicadores problemáticos para ARIMA
         problematic_for_arima = {
             'gdp_growth_pct', 'unemployment_pct', 'inflation_pct',
             'pop_growth_pct', 'poverty_pct', 'remittances_pct_gdp',
@@ -591,15 +701,13 @@ class PredictionService:
         
         # Seleccionar modelo basado en características
         if trend_strength > 0.85 and volatility < 0.1:
-            return "linear"  # Tendencia fuerte y estable
+            return "linear"
         elif trend_strength > 0.7 and volatility < 0.2:
-            return "arima"   # Buena tendencia, volatilidad moderada
+            return "arima"
         elif len(values) >= 10 and self._has_seasonality(values):
-            return "prophet"  # Patrones estacionales
+            return "prophet"
         else:
-            return "random_forest"  # Caso general, más robusto
-
-    # ... [el resto de las funciones auxiliares se mantienen igual, solo copia las que ya tienes] ...
+            return "random_forest"
 
     def _create_features(self, years: List[int], values: List[float]) -> np.ndarray:
         """
@@ -651,8 +759,8 @@ class PredictionService:
         
         # Actualizar diferencias (simplificado)
         if len(new_features) > 4:
-            new_features[5] = new_value - new_features[1] if new_features[1] != 0 else 0  # Diff2
-            new_features[4] = new_value - new_features[0] if new_features[0] != 0 else 0  # Diff1
+            new_features[5] = new_value - new_features[1] if new_features[1] != 0 else 0
+            new_features[4] = new_value - new_features[0] if new_features[0] != 0 else 0
         
         return new_features
 
@@ -662,7 +770,7 @@ class PredictionService:
         """
         if previous == 0:
             return 0.0
-        return float(((current - previous) / abs(previous)) * 100)  # Usar abs() para evitar signos incorrectos
+        return float(((current - previous) / abs(previous)) * 100)
 
     def _calculate_metrics(self, y_true: np.ndarray, y_pred: np.ndarray, indicator: str) -> Dict[str, Any]:
         """
@@ -680,7 +788,7 @@ class PredictionService:
             
             # MAPE (Mean Absolute Percentage Error)
             if np.any(y_true == 0):
-                mape = 100.0  # Valor alto si hay ceros
+                mape = 100.0
             else:
                 mape = np.mean(np.abs((y_true - y_pred) / np.abs(y_true))) * 100
             
@@ -695,10 +803,10 @@ class PredictionService:
                 calidad = "limitada"
             
             return {
-                "r_cuadrado": float(max(r2, 0)),  # No permitir valores negativos
+                "r_cuadrado": float(max(r2, 0)),
                 "mse": float(mse),
                 "mae": float(mae),
-                "mape": float(min(mape, 100)),  # Limitar a 100%
+                "mape": float(min(mape, 100)),
                 "calidad_prediccion": calidad
             }
             
@@ -718,7 +826,6 @@ class PredictionService:
         """
         try:
             if len(X) < 10:
-                # Pocos datos, usar métricas simples
                 y_pred = model.predict(X)
                 return self._calculate_metrics(y, y_pred, indicator)
             
@@ -762,8 +869,8 @@ class PredictionService:
             return {
                 "r_cuadrado": float(max(avg_r2, 0)),
                 "mse": float(avg_mse),
-                "mae": float(np.sqrt(avg_mse)),  # Aproximación
-                "mape": float(10.0),  # Placeholder
+                "mae": float(np.sqrt(avg_mse)),
+                "mape": float(10.0),
                 "calidad_prediccion": calidad
             }
             
@@ -786,58 +893,6 @@ class PredictionService:
             "modelo_seleccionado": model_type,
             "calidad_datos": self._assess_data_quality(values)
         }
-
-    def _generate_summary(self, historical_values: List[float], predictions: List[Dict], 
-                         horizon_years: int, last_historical_year: int) -> Dict[str, Any]:
-        """
-        Genera resumen ejecutivo de las predicciones.
-        """
-        try:
-            last_historical = historical_values[-1]
-            last_prediction = predictions[-1]["valor_predicho"] if predictions else last_historical
-            
-            # Calcular crecimiento total
-            growth_total = self._calculate_growth_rate(last_historical, last_prediction)
-            
-            # Calcular CAGR para el horizonte específico
-            if horizon_years > 0 and last_historical != 0:
-                cagr = ((last_prediction / abs(last_historical)) ** (1/horizon_years) - 1) * 100
-            else:
-                cagr = 0.0
-            
-            # Determinar tendencia principal
-            if cagr > 7:
-                tendencia = "crecimiento_acelerado"
-            elif cagr > 3:
-                tendencia = "crecimiento_moderado"
-            elif cagr > 0:
-                tendencia = "crecimiento_lento"
-            elif cagr > -3:
-                tendencia = "estancamiento"
-            else:
-                tendencia = "decrecimiento"
-            
-            # Calcular año final basado en horizonte
-            last_prediction_year = last_historical_year + horizon_years
-            
-            return {
-                f"valor_{last_historical_year}": float(last_historical),
-                f"valor_{last_prediction_year}": float(last_prediction),
-                "crecimiento_total_pct": float(growth_total),
-                f"cagr_{last_historical_year}_{last_prediction_year}": float(cagr),
-                "tendencia_principal": tendencia,
-                "años_proyectados": len(predictions)
-            }
-        except Exception as e:
-            logger.warning(f"Error generando resumen: {e}")
-            return {
-                "valor_2020": 0.0,
-                "valor_2030": 0.0,
-                "crecimiento_total_pct": 0.0,
-                "cagr_2020_2030": 0.0,
-                "tendencia_principal": "no disponible",
-                "años_proyectados": 0
-            }
 
     def _assess_data_quality(self, values: List[float]) -> str:
         """
@@ -862,7 +917,39 @@ class PredictionService:
         else:
             return "buena"
 
-    # ... [el resto de las funciones get_indicator_name, etc. se mantienen igual] ...
+    def _calculate_trend_strength(self, years: List[int], values: List[float]) -> float:
+        """
+        Calcula la fuerza de la tendencia (R² de regresión lineal).
+        """
+        try:
+            X = np.array(years).reshape(-1, 1)
+            y = np.array(values)
+            
+            model = LinearRegression()
+            model.fit(X, y)
+            y_pred = model.predict(X)
+            
+            return float(r2_score(y, y_pred))
+        except:
+            return 0.0
+
+    def _has_seasonality(self, values: List[float]) -> bool:
+        """
+        Detecta si la serie tiene patrones estacionales.
+        """
+        if len(values) < 8:
+            return False
+        
+        # Análisis simple de autocorrelación
+        diffs = np.diff(values)
+        if len(diffs) < 2:
+            return False
+        
+        try:
+            autocorr = np.corrcoef(diffs[:-1], diffs[1:])[0, 1]
+            return abs(autocorr) > 0.3
+        except:
+            return False
 
     def _get_indicator_name(self, indicator: str) -> str:
         """Obtiene nombre legible del indicador."""
@@ -943,40 +1030,6 @@ class PredictionService:
             'poverty_pct': 0.75
         }
         return accuracies.get(indicator, 0.85)
-
-    def _calculate_trend_strength(self, years: List[int], values: List[float]) -> float:
-        """
-        Calcula la fuerza de la tendencia (R² de regresión lineal).
-        """
-        try:
-            X = np.array(years).reshape(-1, 1)
-            y = np.array(values)
-            
-            model = LinearRegression()
-            model.fit(X, y)
-            y_pred = model.predict(X)
-            
-            return float(r2_score(y, y_pred))
-        except:
-            return 0.0
-
-    def _has_seasonality(self, values: List[float]) -> bool:
-        """
-        Detecta si la serie tiene patrones estacionales.
-        """
-        if len(values) < 8:
-            return False
-        
-        # Análisis simple de autocorrelación
-        diffs = np.diff(values)
-        if len(diffs) < 2:
-            return False
-        
-        try:
-            autocorr = np.corrcoef(diffs[:-1], diffs[1:])[0, 1]
-            return abs(autocorr) > 0.3
-        except:
-            return False
 
 # Instancia global del servicio
 prediction_service = PredictionService()

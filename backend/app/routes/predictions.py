@@ -1,9 +1,10 @@
-# app/routes/predictions.py
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Optional, Dict, Any
 import logging
+import math
+from datetime import datetime
 
 # Importaciones de nuestros módulos
 from app.database.database import get_db
@@ -37,31 +38,27 @@ def predecir_indicador(
     Genera predicciones para un indicador específico usando modelos de Machine Learning.
     Soporta múltiples algoritmos y horizontes de predicción hasta 2030.
     
-    ## Modelos Disponibles:
-    - **ARIMA**: Ideal para series temporales con patrones estacionales
-    - **Random Forest**: Para relaciones no lineales complejas
-    - **Linear Regression**: Para tendencias lineales estables
-    - **Prophet**: Para forecasting robusto con intervalos de confianza
-    - **Auto**: Selección automática del mejor modelo
+    ## Comportamiento por defecto (actualizado):
+    - **Entrenamiento**: 2013-2020 (8 años)
+    - **Predicción**: 2021-2025 (5 años)
+    - **Modelo**: Auto-selección
+    - **Forzar rango**: Sí
     
-    ## Ejemplo de uso:
+    ## Para usar datos completos (1991-2020):
     ```json
     {
         "indicador": "gdp_usd",
-        "modelo": "auto",
-        "horizonte": "completo",
-        "incluir_metricas": true
+        "anio_inicio_entrenamiento": 1991,
+        "anios_prediccion": 10,
+        "forzar_rango": true
     }
     ```
-    
-    ## Respuesta:
-    - Predicciones anuales 2021-2030
-    - Intervalos de confianza (80% y 95%)
-    - Métricas de evaluación del modelo
-    - Resumen ejecutivo y metadatos
     """
     try:
         logger.info(f"📊 Solicitando predicción para {request.indicador} con modelo {request.modelo}")
+        logger.info(f"📅 Configuración: Entrenar desde {request.anio_inicio_entrenamiento}, "
+                   f"Predecir {request.anios_prediccion} años, "
+                   f"Forzar rango: {request.forzar_rango}")
         
         # 1. VALIDAR INDICADOR
         if request.indicador not in prediction_service.available_indicators:
@@ -70,26 +67,82 @@ def predecir_indicador(
                 detail=f"Indicador '{request.indicador}' no soportado. Use /predicciones/indicadores para ver la lista."
             )
         
-        # 2. OBTENER DATOS HISTÓRICOS
+        # 2. DETERMINAR AÑO DE INICIO REAL
+        # Buscar el primer año con datos disponibles para este indicador
+        min_year_query = db.query(func.min(ChinaModel.year)).filter(
+            getattr(ChinaModel, request.indicador).isnot(None)
+        ).scalar()
+        
+        if min_year_query is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No hay datos disponibles para el indicador {request.indicador}"
+            )
+        
+        # Determinar año de inicio real según forzar_rango
+        if request.forzar_rango:
+            anio_inicio_real = request.anio_inicio_entrenamiento
+            # Verificar que el año solicitado tenga datos
+            year_exists = db.query(ChinaModel).filter(
+                ChinaModel.year == anio_inicio_real,
+                getattr(ChinaModel, request.indicador).isnot(None)
+            ).first()
+            
+            if not year_exists:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"No hay datos para el indicador {request.indicador} en el año {anio_inicio_real}. "
+                           f"Primer año con datos: {min_year_query}"
+                )
+        else:
+            # Usar el mayor entre el año solicitado y el primer año con datos
+            anio_inicio_real = max(request.anio_inicio_entrenamiento, min_year_query)
+            if anio_inicio_real != request.anio_inicio_entrenamiento:
+                logger.warning(f"⚠️ Ajustando año de inicio de {request.anio_inicio_entrenamiento} "
+                              f"a {anio_inicio_real} (primer año con datos)")
+        
+        # 3. OBTENER DATOS HISTÓRICOS CON RANGO PERSONALIZADO (2013-2020 por defecto)
         historical_data = db.query(
             ChinaModel.year, 
             getattr(ChinaModel, request.indicador)
         ).filter(
             getattr(ChinaModel, request.indicador).isnot(None)
         ).filter(
-            ChinaModel.year >= 1991
+            ChinaModel.year >= anio_inicio_real
         ).order_by(ChinaModel.year).all()
+        
+        logger.info(f"📅 Rango de datos: {anio_inicio_real}-{historical_data[-1][0] if historical_data else 'N/A'}, "
+                   f"Total años: {len(historical_data)}")
         
         if len(historical_data) < 5:
             raise HTTPException(
                 status_code=400,
-                detail=f"Datos insuficientes para {request.indicador}. Se necesitan al menos 5 años de datos."
+                detail=f"Datos insuficientes para {request.indicador}. "
+                       f"Solo hay {len(historical_data)} años de datos desde {anio_inicio_real}. "
+                       f"Se necesitan al menos 5 años."
             )
         
-        # 3. DETERMINAR HORIZONTE
-        horizon_years = _get_horizon_years(request.horizonte)
+        # 4. DETERMINAR HORIZONTE DE PREDICCIÓN
+        # Prioridad: 1. anios_prediccion, 2. horizonte
+        if request.anios_prediccion:
+            horizon_years = request.anios_prediccion
+        else:
+            horizon_years = _get_horizon_years(request.horizonte)
         
-        # 4. GENERAR PREDICCIÓN
+        # 5. VALIDAR QUE NO SE EXCEDA 2030
+        ultimo_anio_historico = historical_data[-1][0]
+        anio_fin_prediccion = ultimo_anio_historico + horizon_years
+        
+        if anio_fin_prediccion > 2030:
+            horizon_years = 2030 - ultimo_anio_historico
+            logger.warning(f"⚠️ Ajustando horizonte a {horizon_years} años para no exceder 2030")
+            if horizon_years <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No se pueden generar predicciones futuras. El último año histórico ya es 2030 o mayor."
+                )
+        
+        # 6. GENERAR PREDICCIÓN
         result = prediction_service.predict_indicator(
             historical_data=historical_data,
             indicator=request.indicador,
@@ -97,13 +150,76 @@ def predecir_indicador(
             horizon_years=horizon_years
         )
         
-        logger.info(f"✅ Predicción exitosa para {request.indicador} - Modelo: {result['modelo_utilizado']}")
+        # 7. ACTUALIZAR METADATOS CON RANGO REAL USADO
+        result["metadatos"].update({
+            "rango_entrenamiento": f"{anio_inicio_real}-{ultimo_anio_historico}",
+            "horizonte_prediccion": f"{ultimo_anio_historico + 1}-{ultimo_anio_historico + horizon_years}",
+            "total_años_entrenamiento": len(historical_data),
+            "anio_inicio_entrenamiento": anio_inicio_real,
+            "anios_prediccion": horizon_years,
+            "configuracion_solicitud": {
+                "anio_inicio_solicitado": request.anio_inicio_entrenamiento,
+                "forzar_rango": request.forzar_rango,
+                "horizonte_solicitado": request.horizonte.value
+            }
+        })
+        
+        # 8. ACTUALIZAR RESUMEN CON RANGO 2013-2025 (o el rango usado)
+        if request.incluir_metricas:
+            # Encontrar valor del año de inicio real (2013 por defecto)
+            valor_inicio_real = None
+            valor_ultimo_historico = historical_data[-1][1] if historical_data else 0
+            
+            for year, value in historical_data:
+                if year == anio_inicio_real:
+                    valor_inicio_real = value
+                    break
+            
+            # Si no hay datos para el año exacto, usar el primero disponible
+            if valor_inicio_real is None and historical_data:
+                valor_inicio_real = historical_data[0][1]
+            
+            # Encontrar predicción para el último año predicho
+            ultima_prediccion = result["predicciones"][-1] if result["predicciones"] else None
+            valor_ultima_prediccion = ultima_prediccion["valor_predicho"] if ultima_prediccion else 0
+            
+            # Calcular métricas para el rango completo (inicio_real → fin_prediccion)
+            if valor_inicio_real and valor_inicio_real > 0:
+                crecimiento_entrenamiento = ((valor_ultimo_historico - valor_inicio_real) / valor_inicio_real) * 100
+                crecimiento_total = ((valor_ultima_prediccion - valor_inicio_real) / valor_inicio_real) * 100
+                años_totales = (ultimo_anio_historico + horizon_years) - anio_inicio_real
+                cagr_total = _calculate_cagr_total(valor_inicio_real, valor_ultima_prediccion, años_totales)
+            else:
+                crecimiento_entrenamiento = 0
+                crecimiento_total = 0
+                cagr_total = 0
+            
+            # Determinar tendencia
+            tendencia = _determinar_tendencia_2013_2025(result["predicciones"])
+            
+            # Actualizar resumen
+            result["resumen"] = {
+                "valor_inicio": valor_inicio_real or 0,
+                "valor_ultimo_historico": valor_ultimo_historico,
+                "valor_fin_prediccion": valor_ultima_prediccion,
+                "crecimiento_entrenamiento_pct": round(crecimiento_entrenamiento, 2),
+                "crecimiento_total_pct": round(crecimiento_total, 2),
+                "cagr_total": round(cagr_total, 2),
+                "tendencia_principal": tendencia,
+                "años_entrenamiento": f"{anio_inicio_real}-{ultimo_anio_historico}",
+                "años_prediccion": f"{ultimo_anio_historico + 1}-{ultimo_anio_historico + horizon_years}",
+                "rango_completo": f"{anio_inicio_real}-{ultimo_anio_historico + horizon_years}"
+            }
+        
+        logger.info(f"✅ Predicción exitosa - Rango: {anio_inicio_real}-{ultimo_anio_historico} → "
+                   f"{ultimo_anio_historico + 1}-{ultimo_anio_historico + horizon_years}")
+        
         return result
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Error en predicción: {str(e)}")
+        logger.error(f"❌ Error en predicción: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Error interno al generar predicción: {str(e)}"
@@ -120,19 +236,15 @@ def predecir_indicadores_lote(
     Genera predicciones coordinadas para varios indicadores simultáneamente.
     Útil para análisis comparativos y escenarios integrados.
     
+    ## Comportamiento por defecto (actualizado):
+    - **Entrenamiento**: 2013-2020
+    - **Predicción**: 2021-2025
+    - **Forzar rango**: Sí
+    
     ## Características:
     - Predicciones sincronizadas con mismo modelo y horizonte
     - Análisis de correlaciones entre predicciones
     - Metadatos consolidados del proceso por lote
-    
-    ## Ejemplo de uso:
-    ```json
-    {
-        "indicadores": ["gdp_usd", "population", "exports_pct_gdp"],
-        "modelo": "random_forest",
-        "horizonte": "corto_plazo"
-    }
-    ```
     """
     try:
         logger.info(f"📦 Solicitando predicción por lote para {len(request.indicadores)} indicadores")
@@ -149,20 +261,48 @@ def predecir_indicadores_lote(
                 detail=f"Indicadores no válidos: {invalid_indicators}"
             )
         
-        # Procesar cada indicador
+        # Procesar cada indicador con rango personalizado
         predictions = []
-        horizon_years = _get_horizon_years(request.horizonte)
+        # Usar anios_prediccion si está especificado, sino usar horizonte
+        if request.anios_prediccion:
+            horizon_years = request.anios_prediccion
+        else:
+            horizon_years = _get_horizon_years(request.horizonte)
         
         for indicador in request.indicadores:
             try:
-                # Obtener datos históricos
+                # Determinar año de inicio real para este indicador
+                min_year_query = db.query(func.min(ChinaModel.year)).filter(
+                    getattr(ChinaModel, indicador).isnot(None)
+                ).scalar()
+                
+                if min_year_query is None:
+                    logger.warning(f"⚠️ {indicador}: sin datos disponibles, omitido")
+                    continue
+                
+                # Determinar año de inicio según forzar_rango
+                if request.forzar_rango:
+                    anio_inicio_real = request.anio_inicio_entrenamiento
+                    # Verificar que el año solicitado tenga datos
+                    year_exists = db.query(ChinaModel).filter(
+                        ChinaModel.year == anio_inicio_real,
+                        getattr(ChinaModel, indicador).isnot(None)
+                    ).first()
+                    
+                    if not year_exists:
+                        logger.warning(f"⚠️ {indicador}: no hay datos en {anio_inicio_real}, omitido")
+                        continue
+                else:
+                    anio_inicio_real = max(request.anio_inicio_entrenamiento, min_year_query)
+                
+                # Obtener datos históricos con rango personalizado
                 historical_data = db.query(
                     ChinaModel.year, 
                     getattr(ChinaModel, indicador)
                 ).filter(
                     getattr(ChinaModel, indicador).isnot(None)
                 ).filter(
-                    ChinaModel.year >= 1991
+                    ChinaModel.year >= anio_inicio_real
                 ).order_by(ChinaModel.year).all()
                 
                 if len(historical_data) >= 5:
@@ -173,10 +313,21 @@ def predecir_indicadores_lote(
                         model_type=request.modelo.value,
                         horizon_years=horizon_years
                     )
+                    
+                    # Actualizar metadatos con rango real
+                    ultimo_anio_historico = historical_data[-1][0]
+                    result["metadatos"].update({
+                        "rango_entrenamiento": f"{anio_inicio_real}-{ultimo_anio_historico}",
+                        "horizonte_prediccion": f"{ultimo_anio_historico + 1}-{ultimo_anio_historico + horizon_years}",
+                        "total_años_entrenamiento": len(historical_data),
+                        "anio_inicio_entrenamiento": anio_inicio_real,
+                        "anios_prediccion": horizon_years
+                    })
+                    
                     predictions.append(result)
-                    logger.info(f"✅ {indicador}: predicción completada")
+                    logger.info(f"✅ {indicador}: predicción completada ({anio_inicio_real}-{ultimo_anio_historico})")
                 else:
-                    logger.warning(f"⚠️ {indicador}: datos insuficientes, omitido")
+                    logger.warning(f"⚠️ {indicador}: datos insuficientes ({len(historical_data)} años desde {anio_inicio_real}), omitido")
                     
             except Exception as e:
                 logger.error(f"❌ Error en {indicador}: {str(e)}")
@@ -195,8 +346,11 @@ def predecir_indicadores_lote(
                 "total_indicadores": len(request.indicadores),
                 "indicadores_procesados": len(predictions),
                 "modelo_utilizado": request.modelo.value.upper(),
-                "horizonte_prediccion": request.horizonte.value,
-                "tiempo_total_procesamiento_segundos": 0.0,  # Se calcularía en implementación real
+                "horizonte_prediccion": f"2021-{2020 + (request.anios_prediccion or _get_horizon_years(request.horizonte))}",
+                "anio_inicio_entrenamiento": request.anio_inicio_entrenamiento,
+                "anios_prediccion": request.anios_prediccion or _get_horizon_years(request.horizonte),
+                "forzar_rango": request.forzar_rango,
+                "tiempo_total_procesamiento_segundos": 0.0,
                 "fecha_generacion": _get_current_timestamp()
             },
             "correlaciones": _calculate_correlations(predictions)
@@ -229,13 +383,24 @@ def obtener_indicadores_predecibles():
     - Modelo recomendado
     - Precisión esperada
     - Estado de disponibilidad
+    - Rango recomendado (2013-2020)
     """
     try:
         indicators_info = prediction_service.get_available_indicators()
         
+        # Añadir información de rango recomendado a cada indicador
+        for indicator in indicators_info:
+            indicator["rango_recomendado"] = "2013-2020"
+            indicator["años_disponibles"] = "2013-2020"
+        
         return {
             "indicadores": indicators_info,
-            "total_predecibles": len(indicators_info)
+            "total_predecibles": len(indicators_info),
+            "rango_prediccion_default": {
+                "entrenamiento": "2013-2020",
+                "prediccion": "2021-2025",
+                "descripcion": "Rango por defecto para predicciones (datos recientes para predicciones a corto plazo)"
+            }
         }
         
     except Exception as e:
@@ -258,6 +423,7 @@ def obtener_modelos_disponibles():
     - Indicadores compatibles
     - Precisión promedio
     - Estado y última actualización
+    - Rango de entrenamiento recomendado
     """
     try:
         modelos = [
@@ -267,7 +433,9 @@ def obtener_modelos_disponibles():
                 "indicadores_compatibles": ["gdp_usd", "gdp_ppp", "population", "total_reserves_usd"],
                 "precision_promedio": 0.92,
                 "ultimo_entrenamiento": _get_current_timestamp(),
-                "estado": "disponible"
+                "estado": "disponible",
+                "rango_entrenamiento_recomendado": "2013-2020",
+                "años_minimos_entrenamiento": 5
             },
             {
                 "nombre": "RANDOM_FOREST",
@@ -275,7 +443,9 @@ def obtener_modelos_disponibles():
                 "indicadores_compatibles": ["gdp_growth_pct", "unemployment_pct", "inflation_pct", "exports_pct_gdp", "imports_pct_gdp"],
                 "precision_promedio": 0.87,
                 "ultimo_entrenamiento": _get_current_timestamp(),
-                "estado": "disponible"
+                "estado": "disponible",
+                "rango_entrenamiento_recomendado": "2013-2020",
+                "años_minimos_entrenamiento": 6
             },
             {
                 "nombre": "LINEAR_REGRESSION",
@@ -283,7 +453,9 @@ def obtener_modelos_disponibles():
                 "indicadores_compatibles": ["gdp_per_capita_usd", "life_expectancy_years", "pop_growth_pct"],
                 "precision_promedio": 0.89,
                 "ultimo_entrenamiento": _get_current_timestamp(),
-                "estado": "disponible"
+                "estado": "disponible",
+                "rango_entrenamiento_recomendado": "2013-2020",
+                "años_minimos_entrenamiento": 5
             },
             {
                 "nombre": "PROPHET",
@@ -291,7 +463,9 @@ def obtener_modelos_disponibles():
                 "indicadores_compatibles": ["exports_pct_gdp", "imports_pct_gdp", "remittances_pct_gdp"],
                 "precision_promedio": 0.85,
                 "ultimo_entrenamiento": _get_current_timestamp(),
-                "estado": "disponible"
+                "estado": "disponible",
+                "rango_entrenamiento_recomendado": "2013-2020",
+                "años_minimos_entrenamiento": 7
             }
         ]
         
@@ -317,6 +491,7 @@ def obtener_estado_sistema():
     - Número de modelos entrenados
     - Utilización de memoria
     - Rendimiento y precisión promedio
+    - Configuración de rango por defecto
     """
     try:
         return {
@@ -329,6 +504,12 @@ def obtener_estado_sistema():
                 "precision_promedio": 0.88,
                 "solicitudes_procesadas": 127,
                 "cache_hit_rate": 0.65
+            },
+            "configuracion_rango_default": {
+                "anio_inicio_entrenamiento": 2013,
+                "anios_prediccion_default": 5,
+                "forzar_rango_default": True,
+                "descripcion": "Configuración por defecto: entrenar con 2013-2020, predecir 2021-2025"
             }
         }
         
@@ -354,21 +535,15 @@ def entrenar_modelo(
     Entrena un modelo de ML específico con parámetros personalizados.
     Permite optimizar modelos para indicadores particulares.
     
+    ## Comportamiento por defecto:
+    - **Entrenamiento**: 2013-2020
+    - **Forzar rango**: Sí
+    
     ## Características:
     - Parámetros personalizables por modelo
     - Validación cruzada opcional
     - Métricas detalladas de entrenamiento
     - Persistencia del modelo entrenado
-    
-    ## Ejemplo de uso:
-    ```json
-    {
-        "indicador": "gdp_usd",
-        "modelo": "arima",
-        "parametros_personalizados": {"order": [1, 1, 1]},
-        "validacion_cruzada": true
-    }
-    ```
     """
     try:
         logger.info(f"🎯 Solicitando entrenamiento para {request.indicador} con modelo {request.modelo}")
@@ -380,20 +555,51 @@ def entrenar_modelo(
                 detail=f"Indicador '{request.indicador}' no válido para entrenamiento"
             )
         
-        # Obtener datos históricos
+        # Determinar año de inicio real
+        min_year_query = db.query(func.min(ChinaModel.year)).filter(
+            getattr(ChinaModel, request.indicador).isnot(None)
+        ).scalar()
+        
+        if min_year_query is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No hay datos disponibles para el indicador {request.indicador}"
+            )
+        
+        # Determinar año de inicio según forzar_rango
+        if request.forzar_rango:
+            anio_inicio_real = request.anio_inicio_entrenamiento
+            # Verificar que el año solicitado tenga datos
+            year_exists = db.query(ChinaModel).filter(
+                ChinaModel.year == anio_inicio_real,
+                getattr(ChinaModel, request.indicador).isnot(None)
+            ).first()
+            
+            if not year_exists:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"No hay datos para el indicador {request.indicador} en el año {anio_inicio_real}. "
+                           f"Primer año con datos: {min_year_query}"
+                )
+        else:
+            anio_inicio_real = max(request.anio_inicio_entrenamiento or 2013, min_year_query)
+        
+        # Obtener datos históricos con rango personalizado
         historical_data = db.query(
             ChinaModel.year, 
             getattr(ChinaModel, request.indicador)
         ).filter(
             getattr(ChinaModel, request.indicador).isnot(None)
         ).filter(
-            ChinaModel.year >= 1991
+            ChinaModel.year >= anio_inicio_real
         ).order_by(ChinaModel.year).all()
         
         if len(historical_data) < 8:
             raise HTTPException(
                 status_code=400,
-                detail=f"Datos insuficientes para entrenamiento. Se necesitan al menos 8 años de datos."
+                detail=f"Datos insuficientes para entrenamiento. "
+                       f"Solo hay {len(historical_data)} años de datos desde {anio_inicio_real}. "
+                       f"Se necesitan al menos 8 años."
             )
         
         # Simular entrenamiento (en implementación real se entrenaría el modelo)
@@ -409,7 +615,7 @@ def entrenar_modelo(
             "calidad_prediccion": "excelente"
         }
         
-        logger.info(f"✅ Entrenamiento simulado completado para {request.indicador}")
+        logger.info(f"✅ Entrenamiento simulado completado para {request.indicador} ({anio_inicio_real}-{years[-1]})")
         
         return {
             "indicador": request.indicador,
@@ -418,7 +624,10 @@ def entrenar_modelo(
             "metricas_entrenamiento": metrics,
             "parametros_utilizados": request.parametros_personalizados or {"auto": True},
             "tiempo_entrenamiento_segundos": 8.5,
-            "fecha_entrenamiento": _get_current_timestamp()
+            "fecha_entrenamiento": datetime.utcnow(),
+            "rango_entrenamiento": f"{anio_inicio_real}-{years[-1]}",
+            "total_años_entrenamiento": len(years),
+            "anio_inicio_entrenamiento": anio_inicio_real
         }
         
     except HTTPException:
@@ -434,6 +643,7 @@ def entrenar_modelo(
 def obtener_metricas_modelo(
     indicador: str,
     modelo: ModeloML = Query(..., description="Modelo a evaluar"),
+    anio_inicio_entrenamiento: Optional[int] = Query(2013, description="Año de inicio para evaluación"),
     db: Session = Depends(get_db)
 ):
     """
@@ -441,6 +651,9 @@ def obtener_metricas_modelo(
     
     Evalúa y retorna métricas detalladas de rendimiento para un modelo
     específico aplicado a un indicador.
+    
+    ## Parámetros opcionales:
+    - `anio_inicio_entrenamiento`: Año de inicio para evaluación (default: 2013)
     
     ## Métricas incluidas:
     - R² (Coeficiente de determinación)
@@ -456,26 +669,32 @@ def obtener_metricas_modelo(
                 detail=f"Indicador '{indicador}' no válido"
             )
         
-        # Obtener datos históricos
+        # Obtener datos históricos con rango personalizado
         historical_data = db.query(
             ChinaModel.year, 
             getattr(ChinaModel, indicador)
         ).filter(
             getattr(ChinaModel, indicador).isnot(None)
         ).filter(
-            ChinaModel.year >= 1991
+            ChinaModel.year >= anio_inicio_entrenamiento
         ).order_by(ChinaModel.year).all()
         
         if len(historical_data) < 5:
             raise HTTPException(
                 status_code=400,
-                detail="Datos insuficientes para evaluación"
+                detail=f"Datos insuficientes para evaluación. "
+                       f"Solo hay {len(historical_data)} años desde {anio_inicio_entrenamiento}"
             )
         
         # Generar evaluación (simulada por ahora)
+        ultimo_anio = historical_data[-1][0]
+        años_entrenamiento = len(historical_data)
+        
         evaluation = {
             "indicador": indicador,
             "modelo": modelo.value,
+            "rango_evaluacion": f"{anio_inicio_entrenamiento}-{ultimo_anio}",
+            "años_entrenamiento": años_entrenamiento,
             "metricas": {
                 "r_cuadrado": 0.92,
                 "mse": 0.025,
@@ -518,28 +737,62 @@ def _get_horizon_years(horizonte: HorizontePrediccion) -> int:
         HorizontePrediccion.MEDIO_PLAZO: 5,    # 2026-2030
         HorizontePrediccion.COMPLETO: 10       # 2021-2030
     }
-    return horizons.get(horizonte, 10)
+    return horizons.get(horizonte, 5)  # Default a 5 años (corto_plazo)
 
 def _get_current_timestamp() -> str:
     """Retorna timestamp actual en formato ISO."""
-    from datetime import datetime
     return datetime.utcnow().isoformat() + "Z"
+
+def _calculate_cagr_total(valor_inicio: float, valor_fin: float, años: int) -> float:
+    """Calcula la tasa de crecimiento anual compuesta."""
+    if valor_inicio <= 0 or años <= 0:
+        return 0.0
+    try:
+        cagr = (math.pow(valor_fin / valor_inicio, 1 / años) - 1) * 100
+        return round(cagr, 2)
+    except:
+        return 0.0
+
+def _determinar_tendencia_2013_2025(predicciones):
+    """Determina la tendencia principal basada en predicciones 2021-2025."""
+    if not predicciones or len(predicciones) < 3:
+        return "tendencia_indeterminada"
+    
+    # Obtener crecimientos anuales
+    crecimientos = [p.get("crecimiento_anual_pct", 0) for p in predicciones]
+    
+    # Calcular tendencia promedio
+    crecimiento_promedio = sum(crecimientos) / len(crecimientos)
+    
+    if crecimiento_promedio > 7:
+        return "crecimiento_acelerado"
+    elif crecimiento_promedio > 4:
+        return "crecimiento_moderado"
+    elif crecimiento_promedio > 1:
+        return "crecimiento_lento"
+    elif crecimiento_promedio > -2:
+        return "estabilizacion"
+    elif crecimiento_promedio > -5:
+        return "desaceleracion_moderada"
+    else:
+        return "contraccion_fuerte"
 
 def _calculate_correlations(predictions: List[Dict]) -> List[Dict[str, Any]]:
     """
     Calcula correlaciones entre las predicciones de diferentes indicadores.
+    Basado en predicciones para 2025 (rango por defecto 2021-2025).
     """
     try:
         if len(predictions) < 2:
             return []
         
-        # Extraer valores predichos para 2030
+        # Extraer valores predichos para 2025 (último año del rango por defecto)
         future_values = {}
         for pred in predictions:
             indicador = pred["indicador"]
-            # Buscar predicción para 2030
+            # Buscar predicción para 2025
             for p in pred["predicciones"]:
-                if p["año"] == 2030:
+                if p["año"] == 2025:
                     future_values[indicador] = p["valor_predicho"]
                     break
         
@@ -561,7 +814,7 @@ def _calculate_correlations(predictions: List[Dict]) -> List[Dict[str, Any]]:
                 correlations.append({
                     "indicador1": ind1,
                     "indicador2": ind2,
-                    "correlacion_2030": round(correlation, 3),
+                    "correlacion_2025": round(correlation, 3),  # Cambiado de 2030 a 2025
                     "interpretacion": _interpret_correlation(ind1, ind2, correlation)
                 })
         
@@ -595,6 +848,11 @@ def health_check():
         "status": "healthy",
         "module": "predictions",
         "timestamp": _get_current_timestamp(),
-        "models_loaded": len(prediction_service.trained_models),
-        "cache_size": len(prediction_service.prediction_cache)
+        "models_loaded": len(prediction_service.trained_models) if hasattr(prediction_service, 'trained_models') else 0,
+        "cache_size": len(prediction_service.prediction_cache) if hasattr(prediction_service, 'prediction_cache') else 0,
+        "configuracion_default": {
+            "anio_inicio_entrenamiento": 2013,
+            "anios_prediccion": 5,
+            "rango_entrenamiento": "2013-2020"
+        }
     }
