@@ -20,6 +20,15 @@ It is suitable for **data analysis**, **forecasting**, **research**, **education
 
 ---
 
+## 📸 Screenshots
+
+<img width="800" alt="Dashboard" src="https://github.com/user-attachments/assets/d8b2172e-3526-441d-a19a-b2ca30a36649" />
+
+
+<img width="800" alt="Comparative analysis" src="https://github.com/user-attachments/assets/5b4662d9-b1dc-49cb-bc4d-68876f0ee861" />
+
+<img width="400" alt="Predictions" src="https://github.com/user-attachments/assets/eb0c24ac-68cb-46bb-80e0-d62da6dca360" />
+
 ## 🧱 Tech Stack
 
 ### Backend
